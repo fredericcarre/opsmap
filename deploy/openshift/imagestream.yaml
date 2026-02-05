@@ -1,0 +1,21 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: opsmap-backend
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-backend
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: opsmap-frontend
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-frontend
+spec:
+  lookupPolicy:
+    local: true

@@ -1,0 +1,70 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: opsmap
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+spec:
+  host: opsmap.apps.example.com
+  to:
+    kind: Service
+    name: opsmap-frontend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: opsmap-api
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-api
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+    # WebSocket support
+    haproxy.router.openshift.io/websocket: "true"
+spec:
+  host: opsmap.apps.example.com
+  path: /api
+  to:
+    kind: Service
+    name: opsmap-backend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: opsmap-ws
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-ws
+  annotations:
+    haproxy.router.openshift.io/timeout: 3600s
+    haproxy.router.openshift.io/websocket: "true"
+spec:
+  host: opsmap.apps.example.com
+  path: /ws
+  to:
+    kind: Service
+    name: opsmap-backend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

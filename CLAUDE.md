@@ -347,12 +347,436 @@ OPSMAP_ZONE=production
 ## Current Phase: MVP
 
 Focus on:
-1. [ ] Agent core (Rust) - connection, native commands, detached execution
-2. [ ] Gateway core (Rust) - agent registry, routing
-3. [ ] Backend core (Node.js) - API, WebSocket, basic auth
-4. [ ] Frontend core (React) - dashboard, map view, basic operations
-5. [ ] mTLS setup
-6. [ ] Docker deployment
+1. [x] Agent core (Rust) - connection, native commands, detached execution ✅
+2. [x] Gateway core (Rust) - agent registry, routing ✅
+3. [x] Backend core (Node.js) - API, WebSocket, basic auth ✅
+4. [x] Frontend core (React) - dashboard, map view, basic operations ✅
+5. [x] mTLS setup ✅
+6. [x] Docker/Kubernetes/OpenShift deployment ✅
+
+## Agent Development (Rust)
+
+### Quick Start
+
+```bash
+cd agent
+
+# Build debug
+cargo build
+
+# Build release (optimized, ~5MB)
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Run with config
+./target/release/opsmap-agent --config /etc/opsmap/agent.yaml
+```
+
+### Agent Structure
+
+```
+agent/src/
+├── main.rs               # Entry point, CLI
+├── config/               # YAML config loader
+├── connection/           # WebSocket to Gateway
+├── executor/             # Process execution (CRITICAL: double-fork)
+├── scheduler/            # Local check scheduler
+├── native_commands/      # Built-in commands (disk, memory, cpu, etc.)
+└── buffer/               # Offline buffer for disconnected mode
+```
+
+### Key Features
+
+- **Process Detachment**: Double-fork ensures processes survive agent restart
+- **Native Commands**: disk_space, memory, cpu, process, tcp_port, http, load_average
+- **Local Scheduling**: Executes checks autonomously, sends deltas only
+- **Offline Buffer**: Persists data to disk when disconnected
+
+### Configuration
+
+```yaml
+# /etc/opsmap/agent.yaml
+agent:
+  id: auto  # or specific ID
+
+gateway:
+  url: wss://gateway.company.com:443
+  reconnect_interval_secs: 10
+
+tls:
+  enabled: true
+  cert_file: /etc/opsmap/certs/agent.crt
+  key_file: /etc/opsmap/certs/agent.key
+  ca_file: /etc/opsmap/certs/ca.crt
+
+labels:
+  role: database
+  env: production
+```
+
+## Gateway Development (Rust)
+
+### Quick Start
+
+```bash
+cd gateway
+
+# Build
+cargo build --release
+
+# Run
+./target/release/opsmap-gateway --config /etc/opsmap/gateway.yaml
+```
+
+### Gateway Structure
+
+```
+gateway/src/
+├── main.rs               # Entry point, HTTP server
+├── agent_server/         # Accept agent WebSocket connections
+├── backend_client/       # Connect to Backend
+├── registry/             # Agent registry
+└── router/               # Command routing
+```
+
+### Endpoints
+
+```
+GET  /health              # Health check
+GET  /metrics             # Prometheus metrics
+GET  /agents              # List connected agents
+WS   /ws                  # Agent WebSocket endpoint
+```
+
+### Configuration
+
+```yaml
+# /etc/opsmap/gateway.yaml
+gateway:
+  id: gateway-1
+  zone: production
+  listen_addr: 0.0.0.0
+  listen_port: 8443
+
+backend:
+  url: wss://backend.company.com:443/gateway
+  reconnect_interval_secs: 5
+
+tls:
+  enabled: true
+  cert_file: /etc/opsmap/certs/gateway.crt
+  key_file: /etc/opsmap/certs/gateway.key
+  ca_file: /etc/opsmap/certs/ca.crt
+  verify_clients: true
+```
+
+## mTLS Setup
+
+### Generate Certificates
+
+```bash
+# Generate full PKI hierarchy
+./scripts/pki/generate-certs.sh ./certs opsmap.local
+
+# Output:
+# certs/
+# ├── root-ca/          # Root CA (keep offline!)
+# ├── backend/          # Backend certificates
+# ├── gateway/          # Gateway certificates
+# ├── agent/            # Agent certificates
+# └── ca-bundle.crt     # Combined CA bundle
+```
+
+### Certificate Hierarchy
+
+```
+Root CA (offline)
+├── Backend CA
+│   └── backend.crt
+├── Gateway CA
+│   └── gateway-*.crt
+└── Agent CA
+    └── agent-*.crt
+```
+
+## Backend Development
+
+### Quick Start
+
+```bash
+cd backend
+
+# Install dependencies
+npm install
+
+# Set up environment (copy and edit)
+cp .env.example .env
+
+# Run database migrations
+npm run db:migrate
+
+# Seed demo data (optional)
+npm run db:seed
+
+# Start development server
+npm run dev
+```
+
+### Backend Structure
+
+```
+backend/src/
+├── index.ts              # Entry point
+├── config/               # Configuration (env, logger)
+├── api/
+│   ├── server.ts         # Express app setup
+│   ├── middleware/       # Auth, error handling
+│   └── routes/           # API route handlers
+├── auth/                 # JWT, authentication
+├── db/
+│   ├── connection.ts     # PostgreSQL pool
+│   ├── migrations/       # SQL migrations
+│   └── repositories/     # Data access layer
+├── types/                # TypeScript interfaces
+└── websocket/            # Real-time updates
+```
+
+### API Routes
+
+```
+POST   /api/v1/auth/login              # Login
+POST   /api/v1/auth/register           # Register
+GET    /api/v1/auth/me                 # Current user
+POST   /api/v1/auth/refresh            # Refresh token
+
+GET    /api/v1/organizations           # List user's orgs
+POST   /api/v1/organizations           # Create org
+GET    /api/v1/organizations/:id       # Get org details
+GET    /api/v1/organizations/:id/workspaces    # List workspaces
+POST   /api/v1/organizations/:id/workspaces    # Create workspace
+GET    /api/v1/organizations/:id/members       # List members
+POST   /api/v1/organizations/:id/members       # Add member
+
+GET    /api/v1/maps                    # List accessible maps
+POST   /api/v1/maps                    # Create map
+GET    /api/v1/maps/:id                # Get map
+PUT    /api/v1/maps/:id                # Update map
+DELETE /api/v1/maps/:id                # Delete map
+
+GET    /api/v1/maps/:id/components     # List components
+POST   /api/v1/maps/:id/components     # Create component
+PUT    /api/v1/maps/:id/components/:cid    # Update component
+DELETE /api/v1/maps/:id/components/:cid    # Delete component
+POST   /api/v1/maps/:id/components/:cid/start    # Start
+POST   /api/v1/maps/:id/components/:cid/stop     # Stop
+POST   /api/v1/maps/:id/components/:cid/restart  # Restart
+
+GET    /api/v1/maps/:id/permissions           # Get permissions
+POST   /api/v1/maps/:id/permissions/users     # Grant user access
+PUT    /api/v1/maps/:id/permissions/users/:uid    # Update
+DELETE /api/v1/maps/:id/permissions/users/:uid    # Revoke
+POST   /api/v1/maps/:id/share-links           # Create share link
+DELETE /api/v1/maps/:id/share-links/:lid      # Delete share link
+GET    /api/v1/maps/:id/permissions/check     # Check permission
+GET    /api/v1/maps/:id/permissions/effective # Get effective perms
+
+GET    /api/v1/roles                   # List available roles
+
+WS     /ws?token=<jwt>                 # WebSocket connection
+```
+
+### WebSocket Protocol
+
+```typescript
+// Connect with JWT token
+const ws = new WebSocket('ws://localhost:3000/ws?token=YOUR_JWT');
+
+// Subscribe to map updates
+ws.send(JSON.stringify({ type: 'subscribe', payload: { mapId: 'uuid' } }));
+
+// Receive updates
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  // msg.type: 'connected', 'subscribed', 'map_update', 'error'
+};
+
+// Unsubscribe
+ws.send(JSON.stringify({ type: 'unsubscribe', payload: { mapId: 'uuid' } }));
+```
+
+### Demo Credentials
+
+After running `npm run db:seed`:
+- Admin: `demo@opsmap.io` / `demo1234`
+- Operator: `operator@opsmap.io` / `operator123`
+
+### Adding New Migrations
+
+```bash
+npm run db:migrate:create add_feature_table
+# Edit: backend/src/db/migrations/<timestamp>_add_feature_table.sql
+npm run db:migrate
+```
+
+### Testing
+
+```bash
+npm test                 # Run tests
+npm run test:coverage    # With coverage
+npm run typecheck        # Type check only
+npm run lint             # Lint
+```
+
+## Frontend Development
+
+### Quick Start
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Run E2E tests
+npm run test:e2e
+```
+
+### Frontend Structure
+
+```
+frontend/src/
+├── main.tsx              # Entry point
+├── App.tsx               # Root component with routing
+├── index.css             # Global styles (Tailwind)
+├── api/                  # API client and hooks
+│   ├── client.ts         # HTTP client with auth
+│   └── maps.ts           # React Query hooks for maps
+├── components/
+│   ├── ui/               # shadcn/ui components
+│   ├── layout/           # Layout components
+│   └── maps/             # Map-specific components
+├── pages/                # Page components
+│   ├── LoginPage.tsx
+│   ├── DashboardPage.tsx
+│   └── MapViewPage.tsx
+├── hooks/                # Custom hooks
+│   ├── use-toast.ts
+│   └── use-websocket.ts
+├── stores/               # Zustand stores
+│   └── auth.ts
+├── types/                # TypeScript types
+└── lib/                  # Utilities
+```
+
+### Key Features
+
+- **Dashboard**: List of maps with status indicators
+- **Map View**: Mermaid diagram with component dependencies
+- **Component Controls**: Start/Stop/Restart buttons with permission checks
+- **Permissions Modal**: Share maps with users, create share links
+- **Real-time Updates**: WebSocket integration for live status
+
+### E2E Tests
+
+```bash
+# Run E2E tests
+npm run test:e2e
+
+# Run with UI (debug mode)
+npm run test:e2e:ui
+
+# Test files in: frontend/e2e/
+# - auth.spec.ts       # Login/logout tests
+# - dashboard.spec.ts  # Dashboard tests
+# - map-view.spec.ts   # Map view tests
+# - permissions.spec.ts # Permissions modal tests
+```
+
+## Deployment
+
+### Kubernetes
+
+```bash
+# Apply all manifests
+kubectl apply -f deploy/kubernetes/
+
+# Or step by step
+kubectl apply -f deploy/kubernetes/namespace.yaml
+kubectl apply -f deploy/kubernetes/configmap.yaml
+kubectl apply -f deploy/kubernetes/secret.yaml
+kubectl apply -f deploy/kubernetes/postgresql.yaml
+kubectl apply -f deploy/kubernetes/redis.yaml
+kubectl apply -f deploy/kubernetes/backend-deployment.yaml
+kubectl apply -f deploy/kubernetes/frontend-deployment.yaml
+kubectl apply -f deploy/kubernetes/ingress.yaml
+kubectl apply -f deploy/kubernetes/network-policy.yaml
+```
+
+### OpenShift
+
+```bash
+# Create project
+oc new-project opsmap
+
+# Apply Kubernetes manifests (compatible)
+oc apply -f deploy/kubernetes/
+
+# Apply OpenShift-specific resources
+oc apply -f deploy/openshift/route.yaml
+oc apply -f deploy/openshift/imagestream.yaml
+oc apply -f deploy/openshift/buildconfig.yaml
+```
+
+### Docker Build
+
+```bash
+# Build backend
+docker build -f deploy/docker/Dockerfile.backend -t opsmap-backend .
+
+# Build frontend
+docker build -f deploy/docker/Dockerfile.frontend -t opsmap-frontend .
+```
+
+### Security Features
+
+- Non-root containers
+- Read-only root filesystems
+- Dropped capabilities
+- Network policies (zero-trust)
+- Security Context Constraints (OpenShift)
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+
+- **ci.yaml**: Lint, test, build, and scan on every push/PR
+- **cve-scan.yaml**: Daily CVE scanning of dependencies and images
+- **deploy.yaml**: Manual deployment to staging/production
+
+### CVE Scanning
+
+The CI pipeline **fails the build** if HIGH or CRITICAL CVEs are found:
+
+1. **npm audit**: Scans Node.js dependencies
+2. **Trivy**: Scans filesystem, container images, and K8s manifests
+3. **Checkov**: IaC security scanning
+4. **Kubescape**: Kubernetes security scanning
+
+```bash
+# Run locally
+npm audit --audit-level=high
+
+# Trivy scan
+trivy fs --severity HIGH,CRITICAL .
+
+# Scan container image
+trivy image --severity HIGH,CRITICAL opsmap-backend:latest
+```
 
 ## References
 

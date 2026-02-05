@@ -1,0 +1,51 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: opsmap-backend
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/your-org/opsmap.git
+      ref: main
+    contextDir: backend
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: ../deploy/docker/Dockerfile.backend
+  output:
+    to:
+      kind: ImageStreamTag
+      name: opsmap-backend:latest
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: opsmap-frontend
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap-frontend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/your-org/opsmap.git
+      ref: main
+    contextDir: frontend
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: ../deploy/docker/Dockerfile.frontend
+  output:
+    to:
+      kind: ImageStreamTag
+      name: opsmap-frontend:latest
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
