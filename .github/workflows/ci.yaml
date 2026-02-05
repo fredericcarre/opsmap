@@ -215,7 +215,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
         run: npm run db:migrate
 
       - name: Seed database
@@ -223,7 +223,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
         run: npm run db:seed
 
       - name: Start backend
@@ -231,7 +231,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
           PORT: 3000
         run: npm run dev &
 
