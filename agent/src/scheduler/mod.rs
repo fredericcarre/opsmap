@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, Duration, Instant};
 use tracing::{debug, error, info, warn};
 
@@ -13,34 +13,42 @@ use crate::connection::{CheckDefinition, ComponentSnapshot, Snapshot, StatusDelt
 use crate::native_commands::{execute_native, NativeResult};
 use crate::AgentState;
 
-/// Check scheduler
-pub struct CheckScheduler {
+/// Internal scheduler state (protected by Mutex for interior mutability)
+struct SchedulerState {
     snapshot: Option<Snapshot>,
     last_status: HashMap<String, String>, // component_id:check_name -> status
-    last_sent: HashMap<String, Instant>,  // component_id:check_name -> last sent time
+    last_run: HashMap<String, Instant>,   // component_id:check_name -> last run time
+}
+
+/// Check scheduler
+pub struct CheckScheduler {
+    inner: Mutex<SchedulerState>,
 }
 
 impl CheckScheduler {
     pub fn new() -> Self {
         Self {
-            snapshot: None,
-            last_status: HashMap::new(),
-            last_sent: HashMap::new(),
+            inner: Mutex::new(SchedulerState {
+                snapshot: None,
+                last_status: HashMap::new(),
+                last_run: HashMap::new(),
+            }),
         }
     }
 
     /// Update the snapshot of components to manage
-    pub fn update_snapshot(&mut self, snapshot: Snapshot) {
+    pub async fn update_snapshot(&self, snapshot: Snapshot) {
+        let mut state = self.inner.lock().await;
         info!(
             version = snapshot.version,
             components = snapshot.components.len(),
             "Updated snapshot"
         );
-        self.snapshot = Some(snapshot);
+        state.snapshot = Some(snapshot);
     }
 
     /// Run the scheduler
-    pub async fn run(&self, state: Arc<RwLock<AgentState>>) {
+    pub async fn run(&self, agent_state: Arc<RwLock<AgentState>>) {
         let mut ticker = interval(Duration::from_secs(1));
         let mut batch_ticker = interval(Duration::from_secs(60));
         let mut pending_deltas: Vec<StatusDelta> = Vec::new();
@@ -55,15 +63,34 @@ impl CheckScheduler {
                         let result = self.execute_check(&check).await;
 
                         if let Some(delta) = self.process_result(&component, &check, result).await {
-                            // Check if status changed
+                            // Update last_run time
                             let key = format!("{}:{}", component.id, check.name);
-                            let status_changed = self.last_status.get(&key)
-                                .map(|s| s != &delta.status)
-                                .unwrap_or(true);
+                            {
+                                let mut state = self.inner.lock().await;
+                                state.last_run.insert(key.clone(), Instant::now());
+                            }
+
+                            // Check if status changed
+                            let status_changed = {
+                                let mut state = self.inner.lock().await;
+                                let changed = state.last_status.get(&key)
+                                    .map(|s| s != &delta.status)
+                                    .unwrap_or(true);
+
+                                // Update last_status
+                                state.last_status.insert(key.clone(), delta.status.clone());
+                                changed
+                            };
 
                             if status_changed {
+                                info!(
+                                    component_id = %component.id,
+                                    check_name = %check.name,
+                                    status = %delta.status,
+                                    "Status changed, sending immediately"
+                                );
                                 // Send immediately on status change
-                                let mut state = state.write().await;
+                                let mut state = agent_state.write().await;
                                 if let Some(ref mut conn) = state.connection {
                                     if let Err(e) = conn.send_status_delta(delta.clone()).await {
                                         warn!(error = %e, "Failed to send delta, buffering");
@@ -82,9 +109,10 @@ impl CheckScheduler {
                 _ = batch_ticker.tick() => {
                     // Send batched deltas
                     if !pending_deltas.is_empty() {
+                        info!(count = pending_deltas.len(), "Sending batched status updates");
                         let deltas = std::mem::take(&mut pending_deltas);
 
-                        let mut state = state.write().await;
+                        let mut state = agent_state.write().await;
                         if let Some(ref mut conn) = state.connection {
                             if let Err(e) = conn.send_status_batch(deltas.clone()).await {
                                 warn!(error = %e, "Failed to send batch, buffering");
@@ -106,14 +134,15 @@ impl CheckScheduler {
     /// Get checks that are due to run
     async fn get_due_checks(&self) -> Vec<(ComponentSnapshot, CheckDefinition)> {
         let mut due = Vec::new();
+        let state = self.inner.lock().await;
 
-        if let Some(ref snapshot) = self.snapshot {
+        if let Some(ref snapshot) = state.snapshot {
             let now = Instant::now();
 
             for component in &snapshot.components {
                 for check in &component.checks {
                     let key = format!("{}:{}", component.id, check.name);
-                    let last_run = self.last_sent.get(&key).copied();
+                    let last_run = state.last_run.get(&key).copied();
 
                     let should_run = match last_run {
                         None => true,
@@ -237,7 +266,7 @@ impl CheckScheduler {
             check_name: check.name.clone(),
             status,
             message,
-            metrics: metrics.unwrap_or(serde_json::Value::Null),
+            metrics,
             timestamp: chrono::Utc::now(),
         })
     }

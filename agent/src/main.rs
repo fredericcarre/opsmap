@@ -56,7 +56,6 @@ struct Args {
 pub struct AgentState {
     pub config: AgentConfig,
     pub connection: Option<GatewayConnection>,
-    pub scheduler: CheckScheduler,
     pub buffer: OfflineBuffer,
     pub is_connected: bool,
 }
@@ -64,7 +63,6 @@ pub struct AgentState {
 impl AgentState {
     pub fn new(config: AgentConfig) -> Self {
         Self {
-            scheduler: CheckScheduler::new(),
             buffer: OfflineBuffer::new(config.buffer.max_size),
             config,
             connection: None,
@@ -106,12 +104,15 @@ async fn main() -> Result<()> {
     // Create shared state
     let state = Arc::new(RwLock::new(AgentState::new(config)));
 
+    // Create scheduler (separate from state since it has its own internal mutex)
+    let scheduler = Arc::new(CheckScheduler::new());
+
     // Start main loop
-    run_agent(state).await
+    run_agent(state, scheduler).await
 }
 
 /// Main agent loop
-async fn run_agent(state: Arc<RwLock<AgentState>>) -> Result<()> {
+async fn run_agent(state: Arc<RwLock<AgentState>>, scheduler: Arc<CheckScheduler>) -> Result<()> {
     loop {
         // Try to connect to Gateway
         match connect_to_gateway(state.clone()).await {
@@ -119,7 +120,7 @@ async fn run_agent(state: Arc<RwLock<AgentState>>) -> Result<()> {
                 info!("Connected to Gateway");
 
                 // Run while connected
-                if let Err(e) = run_connected(state.clone()).await {
+                if let Err(e) = run_connected(state.clone(), scheduler.clone()).await {
                     error!(error = %e, "Connection error");
                 }
             }
@@ -167,16 +168,17 @@ async fn connect_to_gateway(state: Arc<RwLock<AgentState>>) -> Result<()> {
 }
 
 /// Run while connected to Gateway
-async fn run_connected(state: Arc<RwLock<AgentState>>) -> Result<()> {
+async fn run_connected(state: Arc<RwLock<AgentState>>, scheduler: Arc<CheckScheduler>) -> Result<()> {
     // Start scheduler
     let scheduler_state = state.clone();
+    let scheduler_ref = scheduler.clone();
     let scheduler_handle = tokio::spawn(async move {
-        let state = scheduler_state.read().await;
-        state.scheduler.run(scheduler_state.clone()).await
+        scheduler_ref.run(scheduler_state).await
     });
 
     // Handle messages from Gateway
     let message_state = state.clone();
+    let message_scheduler = scheduler.clone();
     let message_handle = tokio::spawn(async move {
         loop {
             let result = {
@@ -190,7 +192,7 @@ async fn run_connected(state: Arc<RwLock<AgentState>>) -> Result<()> {
 
             match result {
                 Ok(Some(msg)) => {
-                    if let Err(e) = handle_gateway_message(message_state.clone(), msg).await {
+                    if let Err(e) = handle_gateway_message(message_state.clone(), message_scheduler.clone(), msg).await {
                         error!(error = %e, "Failed to handle message");
                     }
                 }
@@ -212,17 +214,30 @@ async fn run_connected(state: Arc<RwLock<AgentState>>) -> Result<()> {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-            let mut state = buffer_state.write().await;
-            if state.is_connected {
-                if let Some(ref mut conn) = state.connection {
-                    while let Some(data) = state.buffer.pop() {
-                        if let Err(e) = conn.send_message(&data).await {
-                            // Put back in buffer and break
-                            state.buffer.push(data);
-                            error!(error = %e, "Failed to send buffered data");
-                            break;
-                        }
+            // Pop data from buffer first, then send
+            loop {
+                let data = {
+                    let mut state = buffer_state.write().await;
+                    if !state.is_connected {
+                        break;
                     }
+                    state.buffer.pop()
+                };
+
+                let Some(data) = data else { break };
+
+                let mut state = buffer_state.write().await;
+                if let Some(ref mut conn) = state.connection {
+                    if let Err(e) = conn.send_message(&data).await {
+                        // Put back in buffer and break
+                        state.buffer.push(data);
+                        error!(error = %e, "Failed to send buffered data");
+                        break;
+                    }
+                } else {
+                    // No connection, put data back
+                    state.buffer.push(data);
+                    break;
                 }
             }
         }
@@ -241,6 +256,7 @@ async fn run_connected(state: Arc<RwLock<AgentState>>) -> Result<()> {
 /// Handle a message from the Gateway
 async fn handle_gateway_message(
     state: Arc<RwLock<AgentState>>,
+    scheduler: Arc<CheckScheduler>,
     message: connection::GatewayMessage,
 ) -> Result<()> {
     use connection::GatewayMessage;
@@ -252,8 +268,7 @@ async fn handle_gateway_message(
                 "Received snapshot"
             );
 
-            let mut state = state.write().await;
-            state.scheduler.update_snapshot(snapshot);
+            scheduler.update_snapshot(snapshot).await;
         }
         GatewayMessage::Command(cmd) => {
             info!(

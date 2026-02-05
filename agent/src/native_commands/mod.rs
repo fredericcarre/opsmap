@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::Path;
-use sysinfo::{CpuExt, DiskExt, NetworkExt, ProcessExt, System, SystemExt};
+use sysinfo::{Disks, Networks, System};
 use tracing::debug;
 
 /// Native command result
@@ -57,13 +57,10 @@ fn check_disk_space(config: &serde_json::Value) -> Result<NativeResult> {
         .and_then(|v| v.as_f64())
         .unwrap_or(90.0);
 
-    let mut sys = System::new();
-    sys.refresh_disks_list();
-    sys.refresh_disks();
+    let disks = Disks::new_with_refreshed_list();
 
     // Find the disk that contains the given path
-    let disk = sys
-        .disks()
+    let disk = disks
         .iter()
         .filter(|d| path.starts_with(d.mount_point().to_str().unwrap_or("")))
         .max_by_key(|d| d.mount_point().to_str().unwrap_or("").len());
@@ -173,9 +170,7 @@ fn check_cpu(config: &serde_json::Value) -> Result<NativeResult> {
     std::thread::sleep(std::time::Duration::from_millis(200));
     sys.refresh_cpu();
 
-    let global_cpu = sys.global_cpu_info();
-    let cpu_usage = global_cpu.cpu_usage() as f64;
-
+    let cpu_usage = sys.global_cpu_info().cpu_usage() as f64;
     let per_cpu: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
 
     let status = if cpu_usage >= critical_threshold {
@@ -364,7 +359,7 @@ fn check_http(config: &serde_json::Value) -> Result<NativeResult> {
         .build()?;
 
     let start = std::time::Instant::now();
-    let response = client.get(url).send();
+    let response: Result<reqwest::blocking::Response, reqwest::Error> = client.get(url).send();
     let duration_ms = start.elapsed().as_millis() as u64;
 
     match response {
@@ -406,10 +401,12 @@ fn check_http(config: &serde_json::Value) -> Result<NativeResult> {
 
 /// Check system load average
 fn check_load_average(config: &serde_json::Value) -> Result<NativeResult> {
-    let sys = System::new();
-    let load = sys.load_average();
+    let load = System::load_average();
 
+    let mut sys = System::new();
+    sys.refresh_cpu();
     let cpu_count = sys.cpus().len() as f64;
+
     let warning_per_cpu = config
         .get("warning_per_cpu")
         .and_then(|v| v.as_f64())
@@ -451,12 +448,9 @@ fn check_network(config: &serde_json::Value) -> Result<NativeResult> {
         .get("interface")
         .and_then(|v| v.as_str());
 
-    let mut sys = System::new();
-    sys.refresh_networks_list();
-    sys.refresh_networks();
+    let networks = Networks::new_with_refreshed_list();
 
-    let networks: Vec<_> = sys
-        .networks()
+    let network_data: Vec<_> = networks
         .iter()
         .filter(|(name, _)| {
             interface.map_or(true, |i| *name == i)
@@ -474,15 +468,15 @@ fn check_network(config: &serde_json::Value) -> Result<NativeResult> {
         })
         .collect();
 
-    if networks.is_empty() && interface.is_some() {
+    if network_data.is_empty() && interface.is_some() {
         return Err(anyhow!("Network interface not found: {}", interface.unwrap()));
     }
 
     Ok(NativeResult {
         status: "ok".to_string(),
-        message: Some(format!("Found {} network interface(s)", networks.len())),
+        message: Some(format!("Found {} network interface(s)", network_data.len())),
         metrics: json!({
-            "interfaces": networks,
+            "interfaces": network_data,
         }),
     })
 }
@@ -687,7 +681,8 @@ fn check_file_content(config: &serde_json::Value) -> Result<NativeResult> {
 
 /// Get OS information
 fn get_os_info(_config: &serde_json::Value) -> Result<NativeResult> {
-    let sys = System::new_all();
+    let mut sys = System::new_all();
+    sys.refresh_all();
 
     let hostname = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
@@ -715,7 +710,6 @@ fn get_os_info(_config: &serde_json::Value) -> Result<NativeResult> {
 
 /// Check system uptime
 fn check_uptime(config: &serde_json::Value) -> Result<NativeResult> {
-    let sys = System::new();
     let uptime_secs = System::uptime();
 
     let min_uptime_secs = config
