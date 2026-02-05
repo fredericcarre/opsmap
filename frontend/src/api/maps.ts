@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { Map, Component, MapPermissions, ApiResponse } from '@/types';
+import type { Map, Component, MapPermissions } from '@/types';
 
 // Maps
 export function useMaps(workspaceId?: string) {

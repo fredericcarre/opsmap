@@ -3,11 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import mermaid from 'mermaid';
 import {
   ArrowLeft,
-  Play,
-  Square,
-  RotateCcw,
   Share2,
-  Settings,
   RefreshCw,
 } from 'lucide-react';
 import { useMap, useComponents, useComponentAction } from '@/api/maps';
@@ -17,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn, getStatusColor, getStatusText } from '@/lib/utils';
 import { PermissionsModal } from '@/components/maps/PermissionsModal';
 import { ComponentPanel } from '@/components/maps/ComponentPanel';
-import type { Component, ComponentStatus } from '@/types';
+import type { Component } from '@/types';
 
 // Initialize mermaid
 mermaid.initialize({
