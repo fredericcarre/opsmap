@@ -30,6 +30,12 @@ pub fn execute_native(command: &str, config: &serde_json::Value) -> Result<Nativ
         "http" => check_http(config),
         "load_average" => check_load_average(config),
         "network" => check_network(config),
+        "service" => check_service(config),
+        "docker_container" => check_docker_container(config),
+        "file_content" => check_file_content(config),
+        "os_info" => get_os_info(config),
+        "uptime" => check_uptime(config),
+        "dns" => check_dns(config),
         _ => Err(anyhow!("Unknown native command: {}", command)),
     }
 }
@@ -498,6 +504,302 @@ fn format_bytes(bytes: u64) -> String {
         format!("{:.2} KB", bytes as f64 / KB as f64)
     } else {
         format!("{} B", bytes)
+    }
+}
+
+/// Check systemd service status
+fn check_service(config: &serde_json::Value) -> Result<NativeResult> {
+    let service_name = config
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'name' in service check config"))?;
+
+    // Use systemctl to check service status
+    let output = std::process::Command::new("systemctl")
+        .args(["is-active", service_name])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let status_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let is_active = status_str == "active";
+
+            // Get more details
+            let show_output = std::process::Command::new("systemctl")
+                .args(["show", service_name, "--property=ActiveState,SubState,MainPID,LoadState"])
+                .output()
+                .ok();
+
+            let mut properties = std::collections::HashMap::new();
+            if let Some(show) = show_output {
+                let props = String::from_utf8_lossy(&show.stdout);
+                for line in props.lines() {
+                    if let Some((key, value)) = line.split_once('=') {
+                        properties.insert(key.to_string(), value.to_string());
+                    }
+                }
+            }
+
+            let status = if is_active { "ok" } else { "error" };
+
+            Ok(NativeResult {
+                status: status.to_string(),
+                message: Some(format!("Service '{}' is {}", service_name, status_str)),
+                metrics: json!({
+                    "service": service_name,
+                    "active": is_active,
+                    "state": status_str,
+                    "active_state": properties.get("ActiveState"),
+                    "sub_state": properties.get("SubState"),
+                    "main_pid": properties.get("MainPID"),
+                    "load_state": properties.get("LoadState"),
+                }),
+            })
+        }
+        Err(e) => Ok(NativeResult {
+            status: "error".to_string(),
+            message: Some(format!("Failed to check service: {}", e)),
+            metrics: json!({
+                "service": service_name,
+                "error": e.to_string(),
+            }),
+        }),
+    }
+}
+
+/// Check Docker container status
+fn check_docker_container(config: &serde_json::Value) -> Result<NativeResult> {
+    let container = config
+        .get("name")
+        .or_else(|| config.get("id"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'name' or 'id' in docker_container check config"))?;
+
+    // Use docker inspect to get container status
+    let output = std::process::Command::new("docker")
+        .args(["inspect", "--format", "{{json .State}}", container])
+        .output();
+
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Ok(NativeResult {
+                    status: "error".to_string(),
+                    message: Some(format!("Container '{}' not found: {}", container, stderr.trim())),
+                    metrics: json!({
+                        "container": container,
+                        "exists": false,
+                    }),
+                });
+            }
+
+            let state: serde_json::Value = serde_json::from_slice(&out.stdout)
+                .unwrap_or_else(|_| json!({}));
+
+            let is_running = state.get("Running").and_then(|v| v.as_bool()).unwrap_or(false);
+            let status_str = state.get("Status").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+            let status = if is_running { "ok" } else { "error" };
+
+            Ok(NativeResult {
+                status: status.to_string(),
+                message: Some(format!("Container '{}' is {}", container, status_str)),
+                metrics: json!({
+                    "container": container,
+                    "exists": true,
+                    "running": is_running,
+                    "status": status_str,
+                    "pid": state.get("Pid"),
+                    "started_at": state.get("StartedAt"),
+                    "health": state.get("Health"),
+                }),
+            })
+        }
+        Err(e) => Ok(NativeResult {
+            status: "error".to_string(),
+            message: Some(format!("Failed to check container (docker not available?): {}", e)),
+            metrics: json!({
+                "container": container,
+                "error": e.to_string(),
+            }),
+        }),
+    }
+}
+
+/// Check file content (read file and optionally match pattern)
+fn check_file_content(config: &serde_json::Value) -> Result<NativeResult> {
+    let path = config
+        .get("path")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'path' in file_content check config"))?;
+
+    let max_lines = config
+        .get("max_lines")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(100) as usize;
+
+    let pattern = config.get("pattern").and_then(|v| v.as_str());
+
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let lines: Vec<&str> = content.lines().take(max_lines).collect();
+            let line_count = content.lines().count();
+
+            let (status, message) = if let Some(pat) = pattern {
+                let matches = content.contains(pat);
+                let should_match = config
+                    .get("should_match")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+
+                if matches == should_match {
+                    ("ok", format!("Pattern '{}' {} in file", pat, if matches { "found" } else { "not found as expected" }))
+                } else {
+                    ("error", format!("Pattern '{}' {} (expected {})", pat, if matches { "found" } else { "not found" }, if should_match { "match" } else { "no match" }))
+                }
+            } else {
+                ("ok", format!("File read successfully ({} lines)", line_count))
+            };
+
+            Ok(NativeResult {
+                status: status.to_string(),
+                message: Some(message),
+                metrics: json!({
+                    "path": path,
+                    "line_count": line_count,
+                    "size_bytes": content.len(),
+                    "content_preview": lines.join("\n"),
+                    "pattern": pattern,
+                }),
+            })
+        }
+        Err(e) => Ok(NativeResult {
+            status: "error".to_string(),
+            message: Some(format!("Failed to read file: {}", e)),
+            metrics: json!({
+                "path": path,
+                "error": e.to_string(),
+            }),
+        }),
+    }
+}
+
+/// Get OS information
+fn get_os_info(_config: &serde_json::Value) -> Result<NativeResult> {
+    let sys = System::new_all();
+
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    Ok(NativeResult {
+        status: "ok".to_string(),
+        message: Some(format!(
+            "{} {} ({})",
+            System::name().unwrap_or_default(),
+            System::os_version().unwrap_or_default(),
+            System::kernel_version().unwrap_or_default()
+        )),
+        metrics: json!({
+            "hostname": hostname,
+            "os_name": System::name(),
+            "os_version": System::os_version(),
+            "kernel_version": System::kernel_version(),
+            "arch": std::env::consts::ARCH,
+            "cpu_count": sys.cpus().len(),
+            "total_memory_bytes": sys.total_memory(),
+        }),
+    })
+}
+
+/// Check system uptime
+fn check_uptime(config: &serde_json::Value) -> Result<NativeResult> {
+    let sys = System::new();
+    let uptime_secs = System::uptime();
+
+    let min_uptime_secs = config
+        .get("min_uptime_secs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    let status = if uptime_secs >= min_uptime_secs { "ok" } else { "warning" };
+
+    // Format uptime human readable
+    let days = uptime_secs / 86400;
+    let hours = (uptime_secs % 86400) / 3600;
+    let minutes = (uptime_secs % 3600) / 60;
+
+    let uptime_str = if days > 0 {
+        format!("{}d {}h {}m", days, hours, minutes)
+    } else if hours > 0 {
+        format!("{}h {}m", hours, minutes)
+    } else {
+        format!("{}m", minutes)
+    };
+
+    Ok(NativeResult {
+        status: status.to_string(),
+        message: Some(format!("System uptime: {}", uptime_str)),
+        metrics: json!({
+            "uptime_seconds": uptime_secs,
+            "uptime_human": uptime_str,
+            "days": days,
+            "hours": hours,
+            "minutes": minutes,
+        }),
+    })
+}
+
+/// Check DNS resolution
+fn check_dns(config: &serde_json::Value) -> Result<NativeResult> {
+    let hostname = config
+        .get("hostname")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'hostname' in dns check config"))?;
+
+    let expected_ip = config.get("expected_ip").and_then(|v| v.as_str());
+
+    let start = std::time::Instant::now();
+    let result = std::net::ToSocketAddrs::to_socket_addrs(&format!("{}:80", hostname));
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(addrs) => {
+            let ips: Vec<String> = addrs.map(|a| a.ip().to_string()).collect();
+
+            let (status, message) = if let Some(expected) = expected_ip {
+                if ips.contains(&expected.to_string()) {
+                    ("ok", format!("DNS resolved {} to {} ({}ms)", hostname, expected, duration_ms))
+                } else {
+                    ("error", format!("DNS resolved {} but {} not found in {:?}", hostname, expected, ips))
+                }
+            } else if ips.is_empty() {
+                ("error", format!("DNS resolution returned no results for {}", hostname))
+            } else {
+                ("ok", format!("DNS resolved {} to {:?} ({}ms)", hostname, ips, duration_ms))
+            };
+
+            Ok(NativeResult {
+                status: status.to_string(),
+                message: Some(message),
+                metrics: json!({
+                    "hostname": hostname,
+                    "resolved_ips": ips,
+                    "resolution_time_ms": duration_ms,
+                    "expected_ip": expected_ip,
+                }),
+            })
+        }
+        Err(e) => Ok(NativeResult {
+            status: "error".to_string(),
+            message: Some(format!("DNS resolution failed for {}: {}", hostname, e)),
+            metrics: json!({
+                "hostname": hostname,
+                "error": e.to_string(),
+                "resolution_time_ms": duration_ms,
+            }),
+        }),
     }
 }
 

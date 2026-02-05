@@ -1,13 +1,21 @@
-import { Play, Square, RotateCcw, X, Terminal, Activity } from 'lucide-react';
+import { useState } from 'react';
+import { Play, Square, RotateCcw, X, Terminal, Activity, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn, getStatusColor, getStatusText } from '@/lib/utils';
+import { useJob } from '@/api/jobs';
+import { JobStatusBadge } from './JobStatusToast';
 import type { Component } from '@/types';
 
 interface ComponentPanelProps {
   component: Component;
-  onAction: (componentId: string, action: 'start' | 'stop' | 'restart') => void;
+  onAction: (componentId: string, action: 'start' | 'stop' | 'restart') => Promise<{ jobId?: string }>;
   onClose: () => void;
   isLoading: boolean;
+}
+
+interface ActiveJob {
+  id: string;
+  action: string;
 }
 
 export function ComponentPanel({
@@ -19,6 +27,23 @@ export function ComponentPanel({
   const status = component.status || 'unknown';
   const actions = component.config.actions || [];
   const checks = component.config.checks || [];
+
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const { data: jobData } = useJob(activeJob?.id || '');
+
+  const handleAction = async (action: 'start' | 'stop' | 'restart') => {
+    try {
+      const result = await onAction(component.id, action);
+      if (result?.jobId) {
+        setActiveJob({ id: result.jobId, action });
+      }
+    } catch (error) {
+      // Error handled by parent
+    }
+  };
+
+  // Clear active job when it completes
+  const isJobComplete = jobData && ['completed', 'failed', 'timeout'].includes(jobData.status);
 
   return (
     <div className="space-y-6">
@@ -33,6 +58,62 @@ export function ComponentPanel({
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Active Job Status */}
+      {activeJob && jobData && !isJobComplete && (
+        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium capitalize">{activeJob.action}</span>
+            <JobStatusBadge status={jobData.status} />
+          </div>
+          {jobData.status === 'running' && (
+            <div className="mt-2 flex items-center text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              Command is executing...
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Job Result */}
+      {activeJob && jobData && isJobComplete && (
+        <div className={cn(
+          "p-3 rounded-lg border",
+          jobData.status === 'completed'
+            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+            : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium capitalize">{activeJob.action}</span>
+            <JobStatusBadge status={jobData.status} />
+          </div>
+          {jobData.result && (
+            <div className="space-y-1 text-xs">
+              {jobData.result.stdout && (
+                <pre className="p-2 rounded bg-background/50 overflow-x-auto max-h-24">
+                  {jobData.result.stdout.slice(0, 500)}
+                </pre>
+              )}
+              {jobData.result.stderr && (
+                <pre className="p-2 rounded bg-background/50 text-red-600 overflow-x-auto max-h-24">
+                  {jobData.result.stderr.slice(0, 500)}
+                </pre>
+              )}
+              <div className="text-muted-foreground">
+                Exit code: {jobData.result.exitCode} | Duration: {jobData.result.durationMs}ms
+              </div>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 text-xs"
+            onClick={() => setActiveJob(null)}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {/* Info */}
       <div className="space-y-2">
@@ -53,28 +134,40 @@ export function ComponentPanel({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => onAction(component.id, 'start')}
-            disabled={isLoading || status === 'ok'}
+            onClick={() => handleAction('start')}
+            disabled={isLoading || (activeJob && !isJobComplete)}
           >
-            <Play className="h-4 w-4 mr-1" />
+            {isLoading && activeJob?.action === 'start' ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4 mr-1" />
+            )}
             Start
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => onAction(component.id, 'stop')}
-            disabled={isLoading || status === 'error'}
+            onClick={() => handleAction('stop')}
+            disabled={isLoading || (activeJob && !isJobComplete)}
           >
-            <Square className="h-4 w-4 mr-1" />
+            {isLoading && activeJob?.action === 'stop' ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Square className="h-4 w-4 mr-1" />
+            )}
             Stop
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => onAction(component.id, 'restart')}
-            disabled={isLoading}
+            onClick={() => handleAction('restart')}
+            disabled={isLoading || (activeJob && !isJobComplete)}
           >
-            <RotateCcw className="h-4 w-4 mr-1" />
+            {isLoading && activeJob?.action === 'restart' ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4 mr-1" />
+            )}
             Restart
           </Button>
         </div>
@@ -90,7 +183,7 @@ export function ComponentPanel({
                 key={action.name}
                 size="sm"
                 variant="secondary"
-                disabled={isLoading}
+                disabled={isLoading || (activeJob && !isJobComplete)}
               >
                 <Terminal className="h-4 w-4 mr-1" />
                 {action.label || action.name}
