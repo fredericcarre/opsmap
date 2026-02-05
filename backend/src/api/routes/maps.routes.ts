@@ -9,9 +9,6 @@ import {
   auditRepository,
   organizationsRepository,
 } from '../../db/repositories/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('maps-routes');
 const router = Router();
 
 const createMapSchema = z.object({

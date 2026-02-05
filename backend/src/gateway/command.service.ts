@@ -1,9 +1,8 @@
-import { v4 as uuidv4 } from 'uuid';
 import { createChildLogger } from '../config/logger.js';
 import { jobsRepository, componentsRepository } from '../db/repositories/index.js';
 import { gatewayManager } from './manager.js';
 import { AgentCommand } from './types.js';
-import { Job, Component, ComponentConfig } from '../types/index.js';
+import { Job, ComponentConfig } from '../types/index.js';
 
 const logger = createChildLogger('command-service');
 
@@ -36,13 +35,10 @@ export const commandService = {
 
     // Find action in component config
     let action: { name: string; command: string; args?: string[]; async?: boolean; runAsUser?: string } | undefined;
-    let isBuiltIn = false;
-
     // Check if it's a built-in command (start, stop, restart)
     if (['start', 'stop', 'restart'].includes(commandName)) {
       const actions = config.actions || [];
       action = actions.find((a) => a.name === commandName);
-      isBuiltIn = true;
     } else {
       // Custom action
       const actions = config.actions || [];

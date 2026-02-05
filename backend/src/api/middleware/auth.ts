@@ -8,6 +8,7 @@ const logger = createChildLogger('auth-middleware');
 
 // Extend Express Request type
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: User;

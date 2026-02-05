@@ -1,8 +1,5 @@
 import { getPool } from '../connection.js';
 import { Job, JobResult } from '../../types/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('jobs-repository');
 
 export interface CreateJobParams {
   type: 'command' | 'action' | 'check';

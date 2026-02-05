@@ -1,4 +1,4 @@
-import { query, transaction } from '../connection.js';
+import { query } from '../connection.js';
 import type { User } from '../../types/index.js';
 import bcrypt from 'bcrypt';
 

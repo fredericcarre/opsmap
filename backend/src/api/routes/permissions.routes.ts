@@ -9,9 +9,6 @@ import {
   permissionsRepository,
   auditRepository,
 } from '../../db/repositories/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('permissions-routes');
 const router = Router();
 
 const grantUserPermissionSchema = z.object({

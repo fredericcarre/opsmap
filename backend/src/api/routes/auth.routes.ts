@@ -2,10 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../../auth/service.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { createChildLogger } from '../../config/logger.js';
 import { auditRepository } from '../../db/repositories/index.js';
 
-const logger = createChildLogger('auth-routes');
 const router = Router();
 
 const loginSchema = z.object({

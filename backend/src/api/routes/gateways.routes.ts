@@ -2,9 +2,6 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { gatewaysRepository, agentsRepository, jobsRepository } from '../../db/repositories/index.js';
 import { gatewayManager, commandService } from '../../gateway/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('gateways-routes');
 const router = Router();
 
 // List all gateways
