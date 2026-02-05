@@ -1,0 +1,118 @@
+# OpsMap Development Environment
+# Usage: docker-compose -f deploy/docker/docker-compose.dev.yaml up
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: opsmap-postgres
+    environment:
+      POSTGRES_USER: opsmap
+      POSTGRES_PASSWORD: opsmap
+      POSTGRES_DB: opsmap
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opsmap"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: opsmap-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: opsmap-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://opsmap:opsmap@postgres:5432/opsmap
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-secret-change-in-production
+      JWT_EXPIRES_IN: 24h
+      CORS_ORIGIN: http://localhost:5173
+      LOG_LEVEL: debug
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../backend/src:/app/src:ro
+    command: npm run dev
+
+  # Frontend (Vite dev server)
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.frontend.dev
+    container_name: opsmap-frontend
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_WS_URL: ws://localhost:3000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ../../frontend/src:/app/src:ro
+      - ../../frontend/public:/app/public:ro
+
+  # Gateway (for full stack testing)
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.gateway
+    container_name: opsmap-gateway
+    environment:
+      RUST_LOG: info
+    ports:
+      - "8443:8443"
+    depends_on:
+      - backend
+    profiles:
+      - full
+
+  # Sample Agent (for testing)
+  agent:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.agent
+    container_name: opsmap-agent
+    environment:
+      RUST_LOG: debug
+      OPSMAP_GATEWAY_URL: ws://gateway:8443/ws
+      OPSMAP_AGENT_ID: agent-dev-1
+    depends_on:
+      - gateway
+    profiles:
+      - full
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: opsmap-network
