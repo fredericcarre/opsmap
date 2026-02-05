@@ -1,8 +1,5 @@
 import { getPool } from '../connection.js';
 import { Agent, Gateway } from '../../types/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('agents-repository');
 
 export interface CreateGatewayParams {
   id: string;
@@ -215,7 +212,7 @@ export const agentsRepository = {
   async findByLabels(labels: Record<string, string>): Promise<Agent[]> {
     const pool = getPool();
     // Build JSONB query for label matching
-    const conditions = Object.entries(labels).map(([key, value], index) => {
+    const conditions = Object.entries(labels).map(([_key, _value], index) => {
       return `labels ->> $${index * 2 + 1} = $${index * 2 + 2}`;
     });
     const values = Object.entries(labels).flat();

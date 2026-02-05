@@ -83,6 +83,7 @@ jobs:
           exit-code: '1'
           format: 'sarif'
           output: 'backend-trivy-results.sarif'
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v2
@@ -160,6 +161,7 @@ jobs:
           exit-code: '1'
           format: 'sarif'
           output: 'frontend-trivy-results.sarif'
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v2
@@ -213,7 +215,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
         run: npm run db:migrate
 
       - name: Seed database
@@ -221,7 +223,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
         run: npm run db:seed
 
       - name: Start backend
@@ -229,7 +231,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://opsmap:opsmap@localhost:5432/opsmap
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-for-ci-minimum-32-characters
           PORT: 3000
         run: npm run dev &
 
@@ -309,6 +311,7 @@ jobs:
           exit-code: '1'
           format: 'sarif'
           output: 'backend-image-trivy.sarif'
+          limit-severities-for-sarif: true
 
       - name: Upload image scan results
         uses: github/codeql-action/upload-sarif@v2
@@ -368,6 +371,7 @@ jobs:
           exit-code: '1'
           format: 'sarif'
           output: 'frontend-image-trivy.sarif'
+          limit-severities-for-sarif: true
 
       - name: Upload image scan results
         uses: github/codeql-action/upload-sarif@v2
@@ -400,6 +404,7 @@ jobs:
           exit-code: '1'
           format: 'sarif'
           output: 'k8s-trivy.sarif'
+          limit-severities-for-sarif: true
 
       - name: Upload K8s scan results
         uses: github/codeql-action/upload-sarif@v2

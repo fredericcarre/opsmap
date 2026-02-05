@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { authMiddleware, requireOrgMembership } from '../middleware/auth.js';
+import { authMiddleware } from '../middleware/auth.js';
 import { ApiError } from '../middleware/error.js';
 import {
   organizationsRepository,
@@ -8,9 +8,6 @@ import {
   usersRepository,
   auditRepository,
 } from '../../db/repositories/index.js';
-import { createChildLogger } from '../../config/logger.js';
-
-const logger = createChildLogger('organizations-routes');
 const router = Router();
 
 const createOrgSchema = z.object({

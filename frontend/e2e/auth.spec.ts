@@ -21,7 +21,7 @@ test.describe('Authentication', () => {
     await page.getByPlaceholder('Enter your password').fill('wrongpassword');
     await page.getByRole('button', { name: 'Sign in' }).click();
 
-    await expect(page.getByText('Login failed')).toBeVisible();
+    await expect(page.getByText('Login failed', { exact: true })).toBeVisible();
   });
 
   test('should login successfully with valid credentials', async ({ page }) => {

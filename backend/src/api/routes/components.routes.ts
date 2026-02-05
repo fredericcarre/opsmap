@@ -9,9 +9,7 @@ import {
   auditRepository,
 } from '../../db/repositories/index.js';
 import { commandService } from '../../gateway/command.service.js';
-import { createChildLogger } from '../../config/logger.js';
 
-const logger = createChildLogger('components-routes');
 const router = Router();
 
 const createComponentSchema = z.object({

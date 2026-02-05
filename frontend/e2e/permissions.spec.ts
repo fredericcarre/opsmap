@@ -7,7 +7,7 @@ test.describe('Permissions', () => {
     await page.getByPlaceholder('you@example.com').fill('demo@opsmap.io');
     await page.getByPlaceholder('Enter your password').fill('demo1234');
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
   });
 
   test('should open permissions modal', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('Permissions', () => {
       await page.getByRole('button', { name: /Share/i }).click();
 
       await page.waitForTimeout(1000);
-      await expect(page.getByText('Owner')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Owner' })).toBeVisible();
     }
   });
 
@@ -83,7 +83,7 @@ test.describe('Permissions', () => {
       await expect(page.getByRole('dialog')).toBeVisible();
 
       // Click close button
-      await page.locator('button[aria-label="Close"]').click();
+      await page.getByRole('button', { name: 'Close' }).click();
 
       await expect(page.getByRole('dialog')).not.toBeVisible();
     }

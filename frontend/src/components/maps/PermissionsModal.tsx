@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   User,
-  Users,
   Link as LinkIcon,
   Copy,
   Trash2,

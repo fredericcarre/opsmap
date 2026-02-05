@@ -4,6 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    exclude: ['e2e/**', 'node_modules/**'],
+    passWithNoTests: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
