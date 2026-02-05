@@ -83,7 +83,7 @@ test.describe('Permissions', () => {
       await expect(page.getByRole('dialog')).toBeVisible();
 
       // Click close button
-      await page.locator('button[aria-label="Close"]').click();
+      await page.getByRole('button', { name: 'Close' }).click();
 
       await expect(page.getByRole('dialog')).not.toBeVisible();
     }
