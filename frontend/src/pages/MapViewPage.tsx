@@ -89,7 +89,7 @@ export function MapViewPage() {
           diagramRef.current.innerHTML = svg;
 
           // Add click handlers to nodes
-          const nodes = diagramRef.current.querySelectorAll('.node');
+          const nodes = diagramRef.current.querySelectorAll<HTMLElement>('.node');
           nodes.forEach((node) => {
             const id = node.id?.replace('flowchart-', '').replace(/-\d+$/, '');
             const component = componentsWithStatus.find((c) => c.externalId === id);
