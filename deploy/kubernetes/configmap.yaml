@@ -10,3 +10,16 @@ data:
   PORT: "3000"
   LOG_LEVEL: "info"
   CORS_ORIGIN: "https://opsmap.example.com"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-headers
+  namespace: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap
+data:
+  X-Content-Type-Options: "nosniff"
+  X-Frame-Options: "DENY"
+  X-XSS-Protection: "1; mode=block"
+  Referrer-Policy: "strict-origin-when-cross-origin"

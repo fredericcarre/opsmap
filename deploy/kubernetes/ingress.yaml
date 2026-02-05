@@ -13,12 +13,8 @@ metadata:
     # WebSocket support
     nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
     nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
-    # Security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header X-Frame-Options "DENY" always;
-      add_header X-XSS-Protection "1; mode=block" always;
-      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # Security headers via ConfigMap reference (avoids configuration-snippet CVE-2021-25742)
+    nginx.ingress.kubernetes.io/custom-headers: "opsmap/security-headers"
 spec:
   ingressClassName: nginx
   tls:
