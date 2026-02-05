@@ -239,7 +239,7 @@ describe('GatewayManager', () => {
       gatewayManager.handleConnection(ws as any);
       await registerGateway(ws, 'gw-6');
 
-      mockJobsRepo.findById.mockResolvedValue({ id: 'job-1', status: 'pending' });
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-1', status: 'pending' } as any);
 
       const messageHandler = getMessageHandler(ws);
       await messageHandler(JSON.stringify({
@@ -255,7 +255,7 @@ describe('GatewayManager', () => {
       gatewayManager.handleConnection(ws as any);
       await registerGateway(ws, 'gw-7');
 
-      mockJobsRepo.findById.mockResolvedValue({ id: 'job-2', status: 'started' });
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-2', status: 'running' } as any);
 
       const messageHandler = getMessageHandler(ws);
       await messageHandler(JSON.stringify({
@@ -283,7 +283,7 @@ describe('GatewayManager', () => {
       gatewayManager.handleConnection(ws as any);
       await registerGateway(ws, 'gw-8');
 
-      mockJobsRepo.findById.mockResolvedValue({ id: 'job-3', status: 'started' });
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-3', status: 'running' } as any);
 
       const messageHandler = getMessageHandler(ws);
       await messageHandler(JSON.stringify({
@@ -299,7 +299,7 @@ describe('GatewayManager', () => {
       gatewayManager.handleConnection(ws as any);
       await registerGateway(ws, 'gw-9');
 
-      mockJobsRepo.findById.mockResolvedValue({ id: 'job-4', status: 'started' });
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-4', status: 'running' } as any);
 
       const messageHandler = getMessageHandler(ws);
       await messageHandler(JSON.stringify({
@@ -410,7 +410,7 @@ describe('GatewayManager', () => {
       await registerGateway(ws, 'gw-lookup');
 
       // Agent not in memory but found in DB with matching gatewayId
-      mockAgentsRepo.findById.mockResolvedValue({ id: 'agent-db', gatewayId: 'gw-lookup' });
+      mockAgentsRepo.findById.mockResolvedValue({ id: 'agent-db', gatewayId: 'gw-lookup' } as any);
 
       const result = await gatewayManager.sendCommand(
         'job-db',
