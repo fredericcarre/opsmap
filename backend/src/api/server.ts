@@ -14,6 +14,7 @@ import mapsRoutes from './routes/maps.routes.js';
 import componentsRoutes from './routes/components.routes.js';
 import permissionsRoutes from './routes/permissions.routes.js';
 import gatewaysRoutes from './routes/gateways.routes.js';
+import auditRoutes from './routes/audit.routes.js';
 
 const logger = createChildLogger('server');
 
@@ -85,6 +86,7 @@ export function createApp(): Express {
   app.use('/api/v1', componentsRoutes); // Components are nested under maps
   app.use('/api/v1', permissionsRoutes); // Permissions are nested under maps
   app.use('/api/v1', gatewaysRoutes); // Gateways, agents, jobs
+  app.use('/api/v1', auditRoutes); // Audit logs
 
   // 404 handler
   app.use(notFoundHandler);
