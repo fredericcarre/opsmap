@@ -86,7 +86,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'backend-trivy-results.sarif'
@@ -164,7 +164,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'frontend-trivy-results.sarif'
@@ -314,7 +314,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload image scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'backend-image-trivy.sarif'
@@ -374,7 +374,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload image scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'frontend-image-trivy.sarif'
@@ -407,7 +407,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload K8s scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'k8s-trivy.sarif'
