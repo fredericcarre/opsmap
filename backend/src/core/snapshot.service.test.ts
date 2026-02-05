@@ -51,7 +51,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-01',
         labels: { role: 'web' },
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([]);
 
       const snapshot = await snapshotService.buildSnapshotForAgent('agent-1');
@@ -65,7 +65,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-01',
         labels: {},
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([
         {
           id: 'comp-1',
@@ -81,7 +81,7 @@ describe('SnapshotService', () => {
               { name: 'stop', label: 'Stop', command: 'systemctl stop trading-api', args: [], async: true },
             ],
           },
-        },
+        } as any,
         {
           id: 'comp-2',
           name: 'redis',
@@ -91,7 +91,7 @@ describe('SnapshotService', () => {
             checks: [],
             actions: [],
           },
-        },
+        } as any,
       ]);
 
       const snapshot = await snapshotService.buildSnapshotForAgent('agent-1');
@@ -107,7 +107,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-db-01',
         labels: { role: 'database', env: 'production' },
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([
         {
           id: 'comp-1',
@@ -118,7 +118,7 @@ describe('SnapshotService', () => {
             checks: [],
             actions: [{ name: 'backup', label: 'Backup', command: '/opt/scripts/backup.sh', args: [], async: true }],
           },
-        },
+        } as any,
         {
           id: 'comp-2',
           name: 'nginx',
@@ -128,7 +128,7 @@ describe('SnapshotService', () => {
             checks: [],
             actions: [],
           },
-        },
+        } as any,
       ]);
 
       const snapshot = await snapshotService.buildSnapshotForAgent('agent-1');
@@ -142,7 +142,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-01',
         labels: { role: 'database' }, // Missing 'env' label
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([
         {
           id: 'comp-1',
@@ -153,7 +153,7 @@ describe('SnapshotService', () => {
             checks: [],
             actions: [],
           },
-        },
+        } as any,
       ]);
 
       const snapshot = await snapshotService.buildSnapshotForAgent('agent-1');
@@ -219,7 +219,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-01',
         labels: {},
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([]);
       vi.mocked(gatewayManager.getConnectedAgents).mockReturnValue([]);
 
@@ -232,7 +232,7 @@ describe('SnapshotService', () => {
         id: 'agent-1',
         hostname: 'srv-01',
         labels: {},
-      });
+      } as any);
       mockComponentsRepo.findAll.mockResolvedValue([]);
       vi.mocked(gatewayManager.getConnectedAgents).mockReturnValue([
         { id: 'agent-1', hostname: 'srv-01', gatewayId: 'gw-1' },

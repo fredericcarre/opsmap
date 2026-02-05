@@ -7,3 +7,6 @@ export * as permissionsRepository from './permissions.repository.js';
 export * as auditRepository from './audit.repository.js';
 export { jobsRepository } from './jobs.repository.js';
 export { gatewaysRepository, agentsRepository } from './agents.repository.js';
+export { checkResultsRepository } from './check-results.repository.js';
+export { groupsRepository } from './groups.repository.js';
+export { agentSnapshotsRepository } from './agent-snapshots.repository.js';

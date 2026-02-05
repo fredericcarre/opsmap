@@ -33,7 +33,7 @@ vi.mock('../gateway/manager.js', () => ({
   },
 }));
 
-import { commandOrchestrator, ExecutionMode } from './command-orchestrator.js';
+import { commandOrchestrator } from './command-orchestrator.js';
 import { componentsRepository, jobsRepository } from '../db/repositories/index.js';
 import { gatewayManager } from '../gateway/manager.js';
 

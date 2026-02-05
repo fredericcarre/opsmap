@@ -50,6 +50,13 @@ export async function findBySlug(
   return result.rows[0] ? rowToMap(result.rows[0]) : null;
 }
 
+export async function findAll(): Promise<Map[]> {
+  const result = await query<MapRow>(
+    'SELECT * FROM maps ORDER BY name'
+  );
+  return result.rows.map(rowToMap);
+}
+
 export async function findByWorkspace(workspaceId: string): Promise<Map[]> {
   const result = await query<MapRow>(
     'SELECT * FROM maps WHERE workspace_id = $1 ORDER BY name',
