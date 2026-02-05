@@ -349,10 +349,138 @@ OPSMAP_ZONE=production
 Focus on:
 1. [ ] Agent core (Rust) - connection, native commands, detached execution
 2. [ ] Gateway core (Rust) - agent registry, routing
-3. [ ] Backend core (Node.js) - API, WebSocket, basic auth
+3. [x] Backend core (Node.js) - API, WebSocket, basic auth ✅
 4. [ ] Frontend core (React) - dashboard, map view, basic operations
 5. [ ] mTLS setup
 6. [ ] Docker deployment
+
+## Backend Development
+
+### Quick Start
+
+```bash
+cd backend
+
+# Install dependencies
+npm install
+
+# Set up environment (copy and edit)
+cp .env.example .env
+
+# Run database migrations
+npm run db:migrate
+
+# Seed demo data (optional)
+npm run db:seed
+
+# Start development server
+npm run dev
+```
+
+### Backend Structure
+
+```
+backend/src/
+├── index.ts              # Entry point
+├── config/               # Configuration (env, logger)
+├── api/
+│   ├── server.ts         # Express app setup
+│   ├── middleware/       # Auth, error handling
+│   └── routes/           # API route handlers
+├── auth/                 # JWT, authentication
+├── db/
+│   ├── connection.ts     # PostgreSQL pool
+│   ├── migrations/       # SQL migrations
+│   └── repositories/     # Data access layer
+├── types/                # TypeScript interfaces
+└── websocket/            # Real-time updates
+```
+
+### API Routes
+
+```
+POST   /api/v1/auth/login              # Login
+POST   /api/v1/auth/register           # Register
+GET    /api/v1/auth/me                 # Current user
+POST   /api/v1/auth/refresh            # Refresh token
+
+GET    /api/v1/organizations           # List user's orgs
+POST   /api/v1/organizations           # Create org
+GET    /api/v1/organizations/:id       # Get org details
+GET    /api/v1/organizations/:id/workspaces    # List workspaces
+POST   /api/v1/organizations/:id/workspaces    # Create workspace
+GET    /api/v1/organizations/:id/members       # List members
+POST   /api/v1/organizations/:id/members       # Add member
+
+GET    /api/v1/maps                    # List accessible maps
+POST   /api/v1/maps                    # Create map
+GET    /api/v1/maps/:id                # Get map
+PUT    /api/v1/maps/:id                # Update map
+DELETE /api/v1/maps/:id                # Delete map
+
+GET    /api/v1/maps/:id/components     # List components
+POST   /api/v1/maps/:id/components     # Create component
+PUT    /api/v1/maps/:id/components/:cid    # Update component
+DELETE /api/v1/maps/:id/components/:cid    # Delete component
+POST   /api/v1/maps/:id/components/:cid/start    # Start
+POST   /api/v1/maps/:id/components/:cid/stop     # Stop
+POST   /api/v1/maps/:id/components/:cid/restart  # Restart
+
+GET    /api/v1/maps/:id/permissions           # Get permissions
+POST   /api/v1/maps/:id/permissions/users     # Grant user access
+PUT    /api/v1/maps/:id/permissions/users/:uid    # Update
+DELETE /api/v1/maps/:id/permissions/users/:uid    # Revoke
+POST   /api/v1/maps/:id/share-links           # Create share link
+DELETE /api/v1/maps/:id/share-links/:lid      # Delete share link
+GET    /api/v1/maps/:id/permissions/check     # Check permission
+GET    /api/v1/maps/:id/permissions/effective # Get effective perms
+
+GET    /api/v1/roles                   # List available roles
+
+WS     /ws?token=<jwt>                 # WebSocket connection
+```
+
+### WebSocket Protocol
+
+```typescript
+// Connect with JWT token
+const ws = new WebSocket('ws://localhost:3000/ws?token=YOUR_JWT');
+
+// Subscribe to map updates
+ws.send(JSON.stringify({ type: 'subscribe', payload: { mapId: 'uuid' } }));
+
+// Receive updates
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  // msg.type: 'connected', 'subscribed', 'map_update', 'error'
+};
+
+// Unsubscribe
+ws.send(JSON.stringify({ type: 'unsubscribe', payload: { mapId: 'uuid' } }));
+```
+
+### Demo Credentials
+
+After running `npm run db:seed`:
+- Admin: `demo@opsmap.io` / `demo1234`
+- Operator: `operator@opsmap.io` / `operator123`
+
+### Adding New Migrations
+
+```bash
+npm run db:migrate:create add_feature_table
+# Edit: backend/src/db/migrations/<timestamp>_add_feature_table.sql
+npm run db:migrate
+```
+
+### Testing
+
+```bash
+npm test                 # Run tests
+npm run test:coverage    # With coverage
+npm run typecheck        # Type check only
+npm run lint             # Lint
+```
 
 ## References
 
