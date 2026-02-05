@@ -350,9 +350,9 @@ Focus on:
 1. [ ] Agent core (Rust) - connection, native commands, detached execution
 2. [ ] Gateway core (Rust) - agent registry, routing
 3. [x] Backend core (Node.js) - API, WebSocket, basic auth ✅
-4. [ ] Frontend core (React) - dashboard, map view, basic operations
+4. [x] Frontend core (React) - dashboard, map view, basic operations ✅
 5. [ ] mTLS setup
-6. [ ] Docker deployment
+6. [x] Docker/Kubernetes/OpenShift deployment ✅
 
 ## Backend Development
 
@@ -480,6 +480,158 @@ npm test                 # Run tests
 npm run test:coverage    # With coverage
 npm run typecheck        # Type check only
 npm run lint             # Lint
+```
+
+## Frontend Development
+
+### Quick Start
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Run E2E tests
+npm run test:e2e
+```
+
+### Frontend Structure
+
+```
+frontend/src/
+├── main.tsx              # Entry point
+├── App.tsx               # Root component with routing
+├── index.css             # Global styles (Tailwind)
+├── api/                  # API client and hooks
+│   ├── client.ts         # HTTP client with auth
+│   └── maps.ts           # React Query hooks for maps
+├── components/
+│   ├── ui/               # shadcn/ui components
+│   ├── layout/           # Layout components
+│   └── maps/             # Map-specific components
+├── pages/                # Page components
+│   ├── LoginPage.tsx
+│   ├── DashboardPage.tsx
+│   └── MapViewPage.tsx
+├── hooks/                # Custom hooks
+│   ├── use-toast.ts
+│   └── use-websocket.ts
+├── stores/               # Zustand stores
+│   └── auth.ts
+├── types/                # TypeScript types
+└── lib/                  # Utilities
+```
+
+### Key Features
+
+- **Dashboard**: List of maps with status indicators
+- **Map View**: Mermaid diagram with component dependencies
+- **Component Controls**: Start/Stop/Restart buttons with permission checks
+- **Permissions Modal**: Share maps with users, create share links
+- **Real-time Updates**: WebSocket integration for live status
+
+### E2E Tests
+
+```bash
+# Run E2E tests
+npm run test:e2e
+
+# Run with UI (debug mode)
+npm run test:e2e:ui
+
+# Test files in: frontend/e2e/
+# - auth.spec.ts       # Login/logout tests
+# - dashboard.spec.ts  # Dashboard tests
+# - map-view.spec.ts   # Map view tests
+# - permissions.spec.ts # Permissions modal tests
+```
+
+## Deployment
+
+### Kubernetes
+
+```bash
+# Apply all manifests
+kubectl apply -f deploy/kubernetes/
+
+# Or step by step
+kubectl apply -f deploy/kubernetes/namespace.yaml
+kubectl apply -f deploy/kubernetes/configmap.yaml
+kubectl apply -f deploy/kubernetes/secret.yaml
+kubectl apply -f deploy/kubernetes/postgresql.yaml
+kubectl apply -f deploy/kubernetes/redis.yaml
+kubectl apply -f deploy/kubernetes/backend-deployment.yaml
+kubectl apply -f deploy/kubernetes/frontend-deployment.yaml
+kubectl apply -f deploy/kubernetes/ingress.yaml
+kubectl apply -f deploy/kubernetes/network-policy.yaml
+```
+
+### OpenShift
+
+```bash
+# Create project
+oc new-project opsmap
+
+# Apply Kubernetes manifests (compatible)
+oc apply -f deploy/kubernetes/
+
+# Apply OpenShift-specific resources
+oc apply -f deploy/openshift/route.yaml
+oc apply -f deploy/openshift/imagestream.yaml
+oc apply -f deploy/openshift/buildconfig.yaml
+```
+
+### Docker Build
+
+```bash
+# Build backend
+docker build -f deploy/docker/Dockerfile.backend -t opsmap-backend .
+
+# Build frontend
+docker build -f deploy/docker/Dockerfile.frontend -t opsmap-frontend .
+```
+
+### Security Features
+
+- Non-root containers
+- Read-only root filesystems
+- Dropped capabilities
+- Network policies (zero-trust)
+- Security Context Constraints (OpenShift)
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+
+- **ci.yaml**: Lint, test, build, and scan on every push/PR
+- **cve-scan.yaml**: Daily CVE scanning of dependencies and images
+- **deploy.yaml**: Manual deployment to staging/production
+
+### CVE Scanning
+
+The CI pipeline **fails the build** if HIGH or CRITICAL CVEs are found:
+
+1. **npm audit**: Scans Node.js dependencies
+2. **Trivy**: Scans filesystem, container images, and K8s manifests
+3. **Checkov**: IaC security scanning
+4. **Kubescape**: Kubernetes security scanning
+
+```bash
+# Run locally
+npm audit --audit-level=high
+
+# Trivy scan
+trivy fs --severity HIGH,CRITICAL .
+
+# Scan container image
+trivy image --severity HIGH,CRITICAL opsmap-backend:latest
 ```
 
 ## References

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opsmap
+  labels:
+    app.kubernetes.io/name: opsmap
+    app.kubernetes.io/part-of: opsmap
