@@ -262,19 +262,64 @@ async fn handle_gateway_message(
                 "Received command"
             );
 
-            // Execute command
-            let result = executor::execute_command(&cmd).await;
-
-            // Send result
-            let mut state = state.write().await;
-            let response = connection::CommandResponse {
-                command_id: cmd.id,
-                success: result.is_ok(),
-                result: result.ok(),
-                error: result.err().map(|e| e.to_string()),
+            // Get agent_id for response
+            let agent_id = {
+                let s = state.read().await;
+                s.config.agent.id.clone()
             };
 
-            if let Some(ref mut conn) = state.connection {
+            // Send "started" response immediately for async commands
+            if matches!(cmd.command_type.as_str(), "start" | "stop" | "restart" | "action") {
+                let mut s = state.write().await;
+                if let Some(ref mut conn) = s.connection {
+                    let started_response = connection::CommandResponse {
+                        job_id: cmd.id.clone(),
+                        agent_id: agent_id.clone(),
+                        status: "started".to_string(),
+                        result: None,
+                        error: None,
+                        timestamp: chrono::Utc::now(),
+                    };
+                    conn.send_command_response(started_response).await?;
+                }
+            }
+
+            // Execute command
+            let exec_result = executor::execute_command(&cmd).await;
+
+            // Build response based on result
+            let (status, result, error) = match exec_result {
+                Ok(cmd_result) => {
+                    let result = connection::CommandResult {
+                        exit_code: cmd_result.exit_code,
+                        stdout: cmd_result.stdout,
+                        stderr: cmd_result.stderr,
+                        duration_ms: cmd_result.duration_ms,
+                        timed_out: false,
+                    };
+                    let status = if cmd_result.exit_code == 0 { "completed" } else { "failed" };
+                    (status.to_string(), Some(result), None)
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    let timed_out = error_msg.contains("timed out");
+                    let status = if timed_out { "timeout" } else { "failed" };
+                    (status.to_string(), None, Some(error_msg))
+                }
+            };
+
+            // Send final result
+            let mut s = state.write().await;
+            let response = connection::CommandResponse {
+                job_id: cmd.id,
+                agent_id,
+                status,
+                result,
+                error,
+                timestamp: chrono::Utc::now(),
+            };
+
+            if let Some(ref mut conn) = s.connection {
                 conn.send_command_response(response).await?;
             }
         }

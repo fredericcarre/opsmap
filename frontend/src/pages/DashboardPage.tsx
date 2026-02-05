@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -12,6 +13,7 @@ import {
 import { useMaps } from '@/api/maps';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CreateMapModal } from '@/components/maps/CreateMapModal';
 import { formatDate } from '@/lib/utils';
 import type { Map } from '@/types';
 
@@ -69,6 +71,7 @@ function MapCard({ map }: { map: Map }) {
 
 export function DashboardPage() {
   const { data: maps, isLoading, error } = useMaps();
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   return (
     <div>
@@ -79,7 +82,7 @@ export function DashboardPage() {
             View and manage your application maps
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setCreateModalOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Map
         </Button>
@@ -120,13 +123,18 @@ export function DashboardPage() {
             <p className="text-muted-foreground mb-4">
               Create your first application map to get started
             </p>
-            <Button>
+            <Button onClick={() => setCreateModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Create Map
             </Button>
           </CardContent>
         </Card>
       )}
+
+      <CreateMapModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+      />
     </div>
   );
 }

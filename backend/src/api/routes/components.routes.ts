@@ -8,6 +8,7 @@ import {
   permissionsRepository,
   auditRepository,
 } from '../../db/repositories/index.js';
+import { commandService } from '../../gateway/command.service.js';
 import { createChildLogger } from '../../config/logger.js';
 
 const logger = createChildLogger('components-routes');
@@ -210,14 +211,14 @@ router.post(
       const { actionName } = req.params;
 
       // Check action permission
-      const result = await permissionsRepository.checkPermission(
+      const permResult = await permissionsRepository.checkPermission(
         req.user!.id,
         req.params.mapId,
         `action:execute`,
         req.params.componentId
       );
-      if (!result.allowed) {
-        throw ApiError.forbidden(result.reason, 'PERMISSION_DENIED');
+      if (!permResult.allowed) {
+        throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
       }
 
       const component = await componentsRepository.findById(req.params.componentId);
@@ -232,6 +233,15 @@ router.post(
         throw ApiError.notFound('Action not found');
       }
 
+      // Execute action via Gateway
+      const result = await commandService.executeComponentCommand({
+        mapId: req.params.mapId,
+        componentId: req.params.componentId,
+        commandName: actionName,
+        userId: req.user!.id,
+        params: req.body,
+      });
+
       await auditRepository.create({
         action: `component.action.${actionName}`,
         actorType: 'user',
@@ -245,13 +255,17 @@ router.post(
           componentName: component.name,
           actionName,
           params: req.body,
+          jobId: result.jobId,
         },
       });
 
-      // TODO: Actually execute the action via Gateway
+      if (!result.success) {
+        throw ApiError.badRequest(result.error || 'Failed to execute action');
+      }
+
       res.json({
-        message: 'Action queued',
-        jobId: 'mock-job-id', // Will be real job ID when Gateway integration is done
+        message: result.message,
+        jobId: result.jobId,
       });
     } catch (error) {
       next(error);
@@ -265,20 +279,28 @@ router.post(
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await permissionsRepository.checkPermission(
+      const permResult = await permissionsRepository.checkPermission(
         req.user!.id,
         req.params.mapId,
         'component:start',
         req.params.componentId
       );
-      if (!result.allowed) {
-        throw ApiError.forbidden(result.reason, 'PERMISSION_DENIED');
+      if (!permResult.allowed) {
+        throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
       }
 
       const component = await componentsRepository.findById(req.params.componentId);
       if (!component || component.mapId !== req.params.mapId) {
         throw ApiError.notFound('Component not found');
       }
+
+      // Execute start command via Gateway
+      const result = await commandService.executeComponentCommand({
+        mapId: req.params.mapId,
+        componentId: req.params.componentId,
+        commandName: 'start',
+        userId: req.user!.id,
+      });
 
       await auditRepository.create({
         action: 'component.start',
@@ -288,11 +310,14 @@ router.post(
         actorIp: req.ip,
         targetType: 'component',
         targetId: req.params.componentId,
-        details: { componentName: component.name },
+        details: { componentName: component.name, jobId: result.jobId },
       });
 
-      // TODO: Send start command via Gateway
-      res.json({ message: 'Start command queued', jobId: 'mock-job-id' });
+      if (!result.success) {
+        throw ApiError.badRequest(result.error || 'Failed to start component');
+      }
+
+      res.json({ message: result.message, jobId: result.jobId });
     } catch (error) {
       next(error);
     }
@@ -305,20 +330,28 @@ router.post(
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await permissionsRepository.checkPermission(
+      const permResult = await permissionsRepository.checkPermission(
         req.user!.id,
         req.params.mapId,
         'component:stop',
         req.params.componentId
       );
-      if (!result.allowed) {
-        throw ApiError.forbidden(result.reason, 'PERMISSION_DENIED');
+      if (!permResult.allowed) {
+        throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
       }
 
       const component = await componentsRepository.findById(req.params.componentId);
       if (!component || component.mapId !== req.params.mapId) {
         throw ApiError.notFound('Component not found');
       }
+
+      // Execute stop command via Gateway
+      const result = await commandService.executeComponentCommand({
+        mapId: req.params.mapId,
+        componentId: req.params.componentId,
+        commandName: 'stop',
+        userId: req.user!.id,
+      });
 
       await auditRepository.create({
         action: 'component.stop',
@@ -328,11 +361,14 @@ router.post(
         actorIp: req.ip,
         targetType: 'component',
         targetId: req.params.componentId,
-        details: { componentName: component.name },
+        details: { componentName: component.name, jobId: result.jobId },
       });
 
-      // TODO: Send stop command via Gateway
-      res.json({ message: 'Stop command queued', jobId: 'mock-job-id' });
+      if (!result.success) {
+        throw ApiError.badRequest(result.error || 'Failed to stop component');
+      }
+
+      res.json({ message: result.message, jobId: result.jobId });
     } catch (error) {
       next(error);
     }
@@ -345,20 +381,28 @@ router.post(
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await permissionsRepository.checkPermission(
+      const permResult = await permissionsRepository.checkPermission(
         req.user!.id,
         req.params.mapId,
         'component:restart',
         req.params.componentId
       );
-      if (!result.allowed) {
-        throw ApiError.forbidden(result.reason, 'PERMISSION_DENIED');
+      if (!permResult.allowed) {
+        throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
       }
 
       const component = await componentsRepository.findById(req.params.componentId);
       if (!component || component.mapId !== req.params.mapId) {
         throw ApiError.notFound('Component not found');
       }
+
+      // Execute restart command via Gateway
+      const result = await commandService.executeComponentCommand({
+        mapId: req.params.mapId,
+        componentId: req.params.componentId,
+        commandName: 'restart',
+        userId: req.user!.id,
+      });
 
       await auditRepository.create({
         action: 'component.restart',
@@ -368,11 +412,14 @@ router.post(
         actorIp: req.ip,
         targetType: 'component',
         targetId: req.params.componentId,
-        details: { componentName: component.name },
+        details: { componentName: component.name, jobId: result.jobId },
       });
 
-      // TODO: Send restart command via Gateway
-      res.json({ message: 'Restart command queued', jobId: 'mock-job-id' });
+      if (!result.success) {
+        throw ApiError.badRequest(result.error || 'Failed to restart component');
+      }
+
+      res.json({ message: result.message, jobId: result.jobId });
     } catch (error) {
       next(error);
     }

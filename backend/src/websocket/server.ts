@@ -2,7 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { verifyToken, type JwtPayload } from '../auth/jwt.js';
 import { createChildLogger } from '../config/logger.js';
-import { permissionsRepository, mapsRepository } from '../db/repositories/index.js';
+import { permissionsRepository } from '../db/repositories/index.js';
+import { gatewayManager } from '../gateway/manager.js';
+import { StatusUpdate } from '../gateway/types.js';
 
 const logger = createChildLogger('websocket');
 
@@ -38,6 +40,7 @@ export class OpsMapWebSocketServer {
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
   constructor(server: Server) {
+    // Frontend WebSocket server
     this.wss = new WebSocketServer({
       server,
       path: '/ws',
@@ -48,6 +51,24 @@ export class OpsMapWebSocketServer {
     this.wss.on('error', (error) => {
       logger.error({ error }, 'WebSocket server error');
     });
+
+    // Gateway WebSocket server (no auth verification - gateways self-identify)
+    const gatewayWss = new WebSocketServer({
+      server,
+      path: '/gateway',
+    });
+
+    gatewayWss.on('connection', (ws) => {
+      logger.info('Gateway connection attempt');
+      gatewayManager.handleConnection(ws);
+    });
+
+    gatewayWss.on('error', (error) => {
+      logger.error({ error }, 'Gateway WebSocket server error');
+    });
+
+    // Listen to gateway manager events and forward to frontend clients
+    this.setupGatewayEventForwarding();
 
     // Start heartbeat
     this.heartbeatInterval = setInterval(() => {
@@ -62,7 +83,55 @@ export class OpsMapWebSocketServer {
       });
     }, 30000);
 
-    logger.info('WebSocket server initialized');
+    // Start gateway manager
+    gatewayManager.start();
+
+    logger.info('WebSocket servers initialized (frontend + gateway)');
+  }
+
+  private setupGatewayEventForwarding(): void {
+    // Forward status updates to subscribed frontend clients
+    gatewayManager.on('status:update', (status: StatusUpdate) => {
+      // Find the mapId for this component
+      if (status.component_id) {
+        // Broadcast to all maps (components track their own mapId)
+        // In a full implementation, we'd look up the component's mapId
+        this.broadcast({
+          type: 'component_status',
+          payload: {
+            componentId: status.component_id,
+            agentId: status.agent_id,
+            status: status.status,
+            message: status.message,
+            metrics: status.metrics,
+            timestamp: status.timestamp,
+          },
+        });
+      }
+    });
+
+    // Forward job updates
+    gatewayManager.on('job:update', (data: { jobId: string; status: string; response: unknown }) => {
+      this.broadcast({
+        type: 'job_update',
+        payload: data,
+      });
+    });
+
+    // Forward agent connection events
+    gatewayManager.on('agent:connected', (data: { agentId: string; gatewayId: string; hostname: string }) => {
+      this.broadcast({
+        type: 'agent_connected',
+        payload: data,
+      });
+    });
+
+    gatewayManager.on('agent:disconnected', (data: { agentId: string; gatewayId: string }) => {
+      this.broadcast({
+        type: 'agent_disconnected',
+        payload: data,
+      });
+    });
   }
 
   private verifyClient(
@@ -334,6 +403,9 @@ export class OpsMapWebSocketServer {
       if (this.heartbeatInterval) {
         clearInterval(this.heartbeatInterval);
       }
+
+      // Stop gateway manager
+      gatewayManager.stop();
 
       this.wss.close(() => {
         logger.info('WebSocket server closed');

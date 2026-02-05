@@ -87,7 +87,7 @@ async fn execute_sync_command(cmd: &Command) -> Result<CommandResult> {
                 stdout,
                 stderr,
                 duration_ms,
-                job_id: None,
+                timed_out: false,
             })
         }
         Ok(Err(e)) => {
@@ -141,13 +141,13 @@ async fn execute_async_command(cmd: &Command) -> Result<CommandResult> {
     // Execute detached process using double-fork
     spawn_detached(command_str, &args, run_as_user.as_deref(), &job_id)?;
 
-    // Return immediately with job_id
+    // Return immediately - process is detached
     Ok(CommandResult {
         exit_code: 0,
-        stdout: String::new(),
+        stdout: format!("Process detached with job_id: {}", job_id),
         stderr: String::new(),
         duration_ms: 0,
-        job_id: Some(job_id),
+        timed_out: false,
     })
 }
 

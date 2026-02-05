@@ -128,10 +128,12 @@ pub struct StatusBatch {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandResponse {
-    pub command_id: String,
-    pub success: bool,
+    pub job_id: String,
+    pub agent_id: String,
+    pub status: String, // "started", "completed", "failed", "timeout"
     pub result: Option<CommandResult>,
     pub error: Option<String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +142,7 @@ pub struct CommandResult {
     pub stdout: String,
     pub stderr: String,
     pub duration_ms: u64,
-    pub job_id: Option<String>,
+    pub timed_out: bool,
 }
 
 /// Gateway connection
