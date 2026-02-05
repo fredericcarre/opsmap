@@ -8,7 +8,7 @@ const router = Router();
 router.get(
   '/gateways',
   authMiddleware,
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const gateways = await gatewaysRepository.findAll();
 
@@ -57,7 +57,7 @@ router.get(
 router.get(
   '/agents',
   authMiddleware,
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const agents = await agentsRepository.findAll();
 
@@ -179,7 +179,7 @@ router.get(
 router.get(
   '/live/gateways',
   authMiddleware,
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const gateways = gatewayManager.getConnectedGateways();
       res.json({ data: gateways });
@@ -193,7 +193,7 @@ router.get(
 router.get(
   '/live/agents',
   authMiddleware,
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const agents = gatewayManager.getConnectedAgents();
       res.json({ data: agents });

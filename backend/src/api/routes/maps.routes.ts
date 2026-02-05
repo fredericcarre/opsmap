@@ -152,7 +152,12 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response, next: Nex
       }
     }
 
-    const updated = await mapsRepository.update(req.params.id, body);
+    const { gitRepoUrl, ...rest } = body;
+    const updateInput = {
+      ...rest,
+      ...(gitRepoUrl !== undefined && { gitRepoUrl: gitRepoUrl ?? undefined }),
+    };
+    const updated = await mapsRepository.update(req.params.id, updateInput);
     if (!updated) {
       throw ApiError.notFound('Map not found');
     }

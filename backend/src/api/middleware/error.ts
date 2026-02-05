@@ -82,7 +82,7 @@ export function errorHandler(
   }
 
   // PostgreSQL unique constraint violation
-  if ((err as Record<string, unknown>).code === '23505') {
+  if ((err as unknown as Record<string, unknown>).code === '23505') {
     res.status(409).json({
       code: 'DUPLICATE_ENTRY',
       message: 'Resource already exists',

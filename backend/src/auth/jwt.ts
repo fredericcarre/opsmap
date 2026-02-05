@@ -17,8 +17,8 @@ export function generateToken(user: User): string {
     name: user.name,
   };
 
-  return jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+  return jwt.sign(payload, config.jwt.secret as jwt.Secret, {
+    expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   });
 }
 

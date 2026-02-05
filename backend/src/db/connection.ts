@@ -21,6 +21,10 @@ pool.on('error', (err) => {
   logger.error({ err }, 'Unexpected database error');
 });
 
+export function getPool(): pg.Pool {
+  return pool;
+}
+
 export async function query<T extends pg.QueryResultRow>(
   text: string,
   params?: unknown[]

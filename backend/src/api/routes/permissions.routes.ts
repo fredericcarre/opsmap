@@ -508,7 +508,7 @@ router.get(
       const isOwner = map.ownerId === req.user!.id;
 
       let effectiveRole = 'none';
-      let permissions: Record<string, string[]> = {
+      let permissions: Record<string, string[]> | { map: string[]; component: string[]; action: string[] } = {
         map: [],
         component: [],
         action: [],
@@ -549,7 +549,7 @@ router.get(
 );
 
 // Get available roles
-router.get('/roles', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/roles', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const roles = await permissionsRepository.listRoles();
     res.json({ data: roles });

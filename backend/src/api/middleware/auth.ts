@@ -62,7 +62,7 @@ export async function authMiddleware(
 // Optional auth - sets user if token present but doesn't require it
 export async function optionalAuthMiddleware(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> {
   const authHeader = req.headers.authorization;
