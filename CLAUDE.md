@@ -347,12 +347,156 @@ OPSMAP_ZONE=production
 ## Current Phase: MVP
 
 Focus on:
-1. [ ] Agent core (Rust) - connection, native commands, detached execution
-2. [ ] Gateway core (Rust) - agent registry, routing
+1. [x] Agent core (Rust) - connection, native commands, detached execution ✅
+2. [x] Gateway core (Rust) - agent registry, routing ✅
 3. [x] Backend core (Node.js) - API, WebSocket, basic auth ✅
 4. [x] Frontend core (React) - dashboard, map view, basic operations ✅
-5. [ ] mTLS setup
+5. [x] mTLS setup ✅
 6. [x] Docker/Kubernetes/OpenShift deployment ✅
+
+## Agent Development (Rust)
+
+### Quick Start
+
+```bash
+cd agent
+
+# Build debug
+cargo build
+
+# Build release (optimized, ~5MB)
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Run with config
+./target/release/opsmap-agent --config /etc/opsmap/agent.yaml
+```
+
+### Agent Structure
+
+```
+agent/src/
+├── main.rs               # Entry point, CLI
+├── config/               # YAML config loader
+├── connection/           # WebSocket to Gateway
+├── executor/             # Process execution (CRITICAL: double-fork)
+├── scheduler/            # Local check scheduler
+├── native_commands/      # Built-in commands (disk, memory, cpu, etc.)
+└── buffer/               # Offline buffer for disconnected mode
+```
+
+### Key Features
+
+- **Process Detachment**: Double-fork ensures processes survive agent restart
+- **Native Commands**: disk_space, memory, cpu, process, tcp_port, http, load_average
+- **Local Scheduling**: Executes checks autonomously, sends deltas only
+- **Offline Buffer**: Persists data to disk when disconnected
+
+### Configuration
+
+```yaml
+# /etc/opsmap/agent.yaml
+agent:
+  id: auto  # or specific ID
+
+gateway:
+  url: wss://gateway.company.com:443
+  reconnect_interval_secs: 10
+
+tls:
+  enabled: true
+  cert_file: /etc/opsmap/certs/agent.crt
+  key_file: /etc/opsmap/certs/agent.key
+  ca_file: /etc/opsmap/certs/ca.crt
+
+labels:
+  role: database
+  env: production
+```
+
+## Gateway Development (Rust)
+
+### Quick Start
+
+```bash
+cd gateway
+
+# Build
+cargo build --release
+
+# Run
+./target/release/opsmap-gateway --config /etc/opsmap/gateway.yaml
+```
+
+### Gateway Structure
+
+```
+gateway/src/
+├── main.rs               # Entry point, HTTP server
+├── agent_server/         # Accept agent WebSocket connections
+├── backend_client/       # Connect to Backend
+├── registry/             # Agent registry
+└── router/               # Command routing
+```
+
+### Endpoints
+
+```
+GET  /health              # Health check
+GET  /metrics             # Prometheus metrics
+GET  /agents              # List connected agents
+WS   /ws                  # Agent WebSocket endpoint
+```
+
+### Configuration
+
+```yaml
+# /etc/opsmap/gateway.yaml
+gateway:
+  id: gateway-1
+  zone: production
+  listen_addr: 0.0.0.0
+  listen_port: 8443
+
+backend:
+  url: wss://backend.company.com:443/gateway
+  reconnect_interval_secs: 5
+
+tls:
+  enabled: true
+  cert_file: /etc/opsmap/certs/gateway.crt
+  key_file: /etc/opsmap/certs/gateway.key
+  ca_file: /etc/opsmap/certs/ca.crt
+  verify_clients: true
+```
+
+## mTLS Setup
+
+### Generate Certificates
+
+```bash
+# Generate full PKI hierarchy
+./scripts/pki/generate-certs.sh ./certs opsmap.local
+
+# Output:
+# certs/
+# ├── root-ca/          # Root CA (keep offline!)
+# ├── backend/          # Backend certificates
+# ├── gateway/          # Gateway certificates
+# ├── agent/            # Agent certificates
+# └── ca-bundle.crt     # Combined CA bundle
+```
+
+### Certificate Hierarchy
+
+```
+Root CA (offline)
+├── Backend CA
+│   └── backend.crt
+├── Gateway CA
+│   └── gateway-*.crt
+└── Agent CA
+    └── agent-*.crt
+```
 
 ## Backend Development
 

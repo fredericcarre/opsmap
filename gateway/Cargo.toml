@@ -1,0 +1,66 @@
+[package]
+name = "opsmap-gateway"
+version = "0.1.0"
+edition = "2021"
+authors = ["OpsMap Team"]
+description = "OpsMap Gateway - Zone relay between agents and backend"
+license = "Apache-2.0"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# WebSocket
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# HTTP server (for health checks and metrics)
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Configuration
+config = "0.14"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# TLS/mTLS
+rustls = "0.22"
+rustls-pemfile = "2.0"
+tokio-rustls = "0.25"
+
+# UUID
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Metrics
+prometheus = "0.13"
+
+# Connection pooling
+dashmap = "5.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
