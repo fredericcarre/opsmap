@@ -9,6 +9,8 @@ import {
   Share2,
   Settings,
   RefreshCw,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import { useMap, useComponents, useComponentAction } from '@/api/maps';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -17,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn, getStatusColor, getStatusText } from '@/lib/utils';
 import { PermissionsModal } from '@/components/maps/PermissionsModal';
 import { ComponentPanel } from '@/components/maps/ComponentPanel';
+import { ComponentModal } from '@/components/maps/ComponentModal';
 import type { Component, ComponentStatus } from '@/types';
 
 // Initialize mermaid
@@ -67,10 +70,24 @@ export function MapViewPage() {
   const diagramRef = useRef<HTMLDivElement>(null);
   const [selectedComponent, setSelectedComponent] = useState<Component | null>(null);
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showComponentModal, setShowComponentModal] = useState(false);
+  const [editingComponent, setEditingComponent] = useState<Component | null>(null);
 
   const { data: map, isLoading: mapLoading } = useMap(mapId!);
   const { data: components, isLoading: componentsLoading, refetch } = useComponents(mapId!);
   const componentAction = useComponentAction();
+
+  // Open modal to create a new component
+  const handleCreateComponent = () => {
+    setEditingComponent(null);
+    setShowComponentModal(true);
+  };
+
+  // Open modal to edit an existing component
+  const handleEditComponent = (component: Component) => {
+    setEditingComponent(component);
+    setShowComponentModal(true);
+  };
 
   // WebSocket for real-time updates
   const { componentStatuses } = useWebSocket(mapId!);
@@ -160,6 +177,10 @@ export function MapViewPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={handleCreateComponent}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Component
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowPermissions(true)}>
             <Share2 className="h-4 w-4 mr-2" />
             Share
@@ -183,10 +204,20 @@ export function MapViewPage() {
 
         {/* Component List / Details */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>
               {selectedComponent ? selectedComponent.name : 'Components'}
             </CardTitle>
+            {selectedComponent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEditComponent(selectedComponent)}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {selectedComponent ? (
@@ -232,6 +263,24 @@ export function MapViewPage() {
         mapId={mapId!}
         open={showPermissions}
         onOpenChange={setShowPermissions}
+      />
+
+      {/* Component Create/Edit Modal */}
+      <ComponentModal
+        open={showComponentModal}
+        onOpenChange={(open) => {
+          setShowComponentModal(open);
+          if (!open) {
+            setEditingComponent(null);
+            // Clear selected component if it was deleted
+            if (selectedComponent && editingComponent?.id === selectedComponent.id) {
+              setSelectedComponent(null);
+            }
+          }
+        }}
+        mapId={mapId!}
+        component={editingComponent}
+        existingComponents={componentsWithStatus || []}
       />
     </div>
   );

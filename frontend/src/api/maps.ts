@@ -96,6 +96,96 @@ export function useComponentAction() {
   });
 }
 
+export function useCreateComponent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      mapId,
+      data,
+    }: {
+      mapId: string;
+      data: {
+        externalId: string;
+        name: string;
+        type: string;
+        config?: {
+          agentSelector?: { agentId?: string; labels?: Record<string, string> };
+          checks?: Array<{
+            name: string;
+            type: string;
+            config: Record<string, unknown>;
+            intervalSecs: number;
+            timeoutSecs?: number;
+          }>;
+          actions?: Array<{
+            name: string;
+            label?: string;
+            command: string;
+            args?: string[];
+            runAsUser?: string;
+            isAsync?: boolean;
+            confirmationRequired?: boolean;
+          }>;
+          dependencies?: string[];
+          metadata?: Record<string, unknown>;
+        };
+        position?: { x: number; y: number };
+      };
+    }) => api.post<Component>(`/api/v1/maps/${mapId}/components`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['maps', variables.mapId, 'components'],
+      });
+    },
+  });
+}
+
+export function useUpdateComponent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      mapId,
+      componentId,
+      data,
+    }: {
+      mapId: string;
+      componentId: string;
+      data: {
+        name?: string;
+        type?: string;
+        config?: Record<string, unknown>;
+        position?: { x: number; y: number };
+      };
+    }) => api.put<Component>(`/api/v1/maps/${mapId}/components/${componentId}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['maps', variables.mapId, 'components'],
+      });
+    },
+  });
+}
+
+export function useDeleteComponent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      mapId,
+      componentId,
+    }: {
+      mapId: string;
+      componentId: string;
+    }) => api.delete(`/api/v1/maps/${mapId}/components/${componentId}`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['maps', variables.mapId, 'components'],
+      });
+    },
+  });
+}
+
 // Permissions
 export function useMapPermissions(mapId: string) {
   return useQuery({
