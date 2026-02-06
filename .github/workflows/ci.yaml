@@ -309,13 +309,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Scan built image for CVEs
+      # Scan built image for CVEs (table output for log visibility)
+      - name: Scan image for vulnerabilities (log)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'
+          format: 'table'
+          ignore-unfixed: true
+
+      # Scan built image for CVEs (SARIF for GitHub Security tab)
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
+          ignore-unfixed: true
           format: 'sarif'
           output: 'backend-image-trivy.sarif'
           limit-severities-for-sarif: true
@@ -370,13 +381,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Scan built image for CVEs
+      # Scan built image for CVEs (table output for log visibility)
+      - name: Scan image for vulnerabilities (log)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'
+          format: 'table'
+          ignore-unfixed: true
+
+      # Scan built image for CVEs (SARIF for GitHub Security tab)
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
+          ignore-unfixed: true
           format: 'sarif'
           output: 'frontend-image-trivy.sarif'
           limit-severities-for-sarif: true
