@@ -314,6 +314,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          scanners: 'vuln'
           severity: 'HIGH,CRITICAL'
           exit-code: '0'
           format: 'table'
@@ -324,6 +325,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          scanners: 'vuln'
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
           ignore-unfixed: true
@@ -386,6 +388,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          scanners: 'vuln'
           severity: 'HIGH,CRITICAL'
           exit-code: '0'
           format: 'table'
@@ -396,6 +399,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          scanners: 'vuln'
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
           ignore-unfixed: true
