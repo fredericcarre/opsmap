@@ -3,12 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+# Install dependencies (context is repo root)
+COPY frontend/package*.json ./
 RUN npm ci
 
 # Copy source
-COPY . .
+COPY frontend/ .
 
 # Build
 RUN npm run build
