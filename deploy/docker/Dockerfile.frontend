@@ -13,8 +13,13 @@ COPY frontend/ .
 # Build
 RUN npm run build
 
-# Production stage - using nginx unprivileged
-FROM nginxinc/nginx-unprivileged:1.25-alpine AS production
+# Production stage - using nginx unprivileged (stable branch)
+FROM nginxinc/nginx-unprivileged:1.28-alpine AS production
+
+# Patch Alpine OS packages to fix known CVEs (OpenSSL, etc.)
+USER root
+RUN apk upgrade --no-cache
+USER nginx
 
 # Copy custom nginx config
 COPY deploy/docker/nginx.conf /etc/nginx/nginx.conf
