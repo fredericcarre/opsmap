@@ -8,7 +8,10 @@ import {
   permissionsRepository,
   auditRepository,
   organizationsRepository,
+  componentsRepository,
 } from '../../db/repositories/index.js';
+import { commandOrchestrator } from '../../core/command-orchestrator.js';
+import { Component, ComponentConfig } from '../../types/index.js';
 const router = Router();
 
 const createMapSchema = z.object({
@@ -241,5 +244,187 @@ router.post('/:id/transfer', authMiddleware, async (req: Request, res: Response,
     next(error);
   }
 });
+
+// Start all components in a map (respects dependency order)
+router.post('/:id/start', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const permResult = await permissionsRepository.checkPermission(
+      req.user!.id,
+      req.params.id,
+      'component:start'
+    );
+    if (!permResult.allowed) {
+      throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
+    }
+
+    const components = await componentsRepository.findByMap(req.params.id);
+
+    // Sort by dependencies: components with no dependencies first
+    const sorted = sortByDependencies(components);
+
+    const results: Array<{ componentId: string; name: string; success: boolean; jobId?: string; error?: string }> = [];
+
+    for (const component of sorted) {
+      const config = component.config as ComponentConfig;
+      const hasStart = (config.actions || []).some((a) => a.name === 'start');
+      if (!hasStart) {
+        results.push({ componentId: component.id, name: component.name, success: true, error: 'No start action defined' });
+        continue;
+      }
+
+      const result = await commandOrchestrator.executeCommand({
+        mapId: req.params.id,
+        componentId: component.id,
+        commandName: 'start',
+        userId: req.user!.id,
+      });
+
+      results.push({
+        componentId: component.id,
+        name: component.name,
+        success: result.success,
+        jobId: result.jobId,
+        error: result.error,
+      });
+    }
+
+    await auditRepository.create({
+      action: 'map.start',
+      actorType: 'user',
+      actorId: req.user!.id,
+      actorEmail: req.user!.email,
+      actorIp: req.ip,
+      targetType: 'map',
+      targetId: req.params.id,
+      details: { componentCount: components.length, results },
+    });
+
+    res.json({
+      message: `Start initiated for ${components.length} components`,
+      results,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Stop all components in a map (reverse dependency order)
+router.post('/:id/stop', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const permResult = await permissionsRepository.checkPermission(
+      req.user!.id,
+      req.params.id,
+      'component:stop'
+    );
+    if (!permResult.allowed) {
+      throw ApiError.forbidden(permResult.reason, 'PERMISSION_DENIED');
+    }
+
+    const components = await componentsRepository.findByMap(req.params.id);
+
+    // Reverse dependency order for stop: dependents stop first
+    const sorted = sortByDependencies(components).reverse();
+
+    const results: Array<{ componentId: string; name: string; success: boolean; jobId?: string; error?: string }> = [];
+
+    for (const component of sorted) {
+      const config = component.config as ComponentConfig;
+      const hasStop = (config.actions || []).some((a) => a.name === 'stop');
+      if (!hasStop) {
+        results.push({ componentId: component.id, name: component.name, success: true, error: 'No stop action defined' });
+        continue;
+      }
+
+      const result = await commandOrchestrator.executeCommand({
+        mapId: req.params.id,
+        componentId: component.id,
+        commandName: 'stop',
+        userId: req.user!.id,
+      });
+
+      results.push({
+        componentId: component.id,
+        name: component.name,
+        success: result.success,
+        jobId: result.jobId,
+        error: result.error,
+      });
+    }
+
+    await auditRepository.create({
+      action: 'map.stop',
+      actorType: 'user',
+      actorId: req.user!.id,
+      actorEmail: req.user!.email,
+      actorIp: req.ip,
+      targetType: 'map',
+      targetId: req.params.id,
+      details: { componentCount: components.length, results },
+    });
+
+    res.json({
+      message: `Stop initiated for ${components.length} components`,
+      results,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get live status of a map (aggregated from all components)
+router.get('/:id/status', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await checkMapAccess(req.user!.id, req.params.id, 'map:view');
+
+    const map = await mapsRepository.findById(req.params.id);
+    const components = await componentsRepository.findByMap(req.params.id);
+    const activeJobs = commandOrchestrator.getActiveJobs()
+      .filter((j) => components.some((c) => c.id === j.componentId));
+
+    res.json({
+      mapId: req.params.id,
+      mapName: map?.name,
+      componentCount: components.length,
+      activeJobs: activeJobs.map((j) => ({
+        jobId: j.jobId,
+        componentId: j.componentId,
+        commandName: j.commandName,
+        status: j.status,
+        startedAt: j.startedAt,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Topological sort: components with no dependencies come first.
+ * Components with dependencies come after their dependencies.
+ */
+function sortByDependencies(components: Component[]): Component[] {
+  const byName = new Map(components.map((c) => [c.name, c]));
+  const visited = new Set<string>();
+  const sorted: Component[] = [];
+
+  function visit(comp: Component) {
+    if (visited.has(comp.id)) return;
+    visited.add(comp.id);
+
+    const config = comp.config as ComponentConfig;
+    const deps = config.dependencies || [];
+    for (const depName of deps) {
+      const dep = byName.get(depName);
+      if (dep) visit(dep);
+    }
+    sorted.push(comp);
+  }
+
+  for (const comp of components) {
+    visit(comp);
+  }
+
+  return sorted;
+}
 
 export default router;

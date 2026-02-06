@@ -19,6 +19,7 @@ import groupsRoutes from './routes/groups.routes.js';
 import checkResultsRoutes from './routes/check-results.routes.js';
 import mcpRoutes from './routes/mcp.routes.js';
 import gitopsRoutes from './routes/gitops.routes.js';
+import workspacesRoutes from './routes/workspaces.routes.js';
 
 const logger = createChildLogger('server');
 
@@ -95,6 +96,7 @@ export function createApp(): Express {
   app.use('/api/v1', checkResultsRoutes); // Check results and status
   app.use('/api/v1', mcpRoutes); // MCP Server
   app.use('/api/v1', gitopsRoutes); // GitOps (map export/import/sync)
+  app.use('/api/v1/workspaces', workspacesRoutes); // Workspace CRUD
 
   // 404 handler
   app.use(notFoundHandler);

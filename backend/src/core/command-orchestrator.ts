@@ -4,6 +4,7 @@ import { jobsRepository, componentsRepository } from '../db/repositories/index.j
 import { gatewayManager } from '../gateway/manager.js';
 import { AgentCommand } from '../gateway/types.js';
 import { ComponentConfig } from '../types/index.js';
+import { fsmManager, ComponentEvent } from './fsm/index.js';
 
 const logger = createChildLogger('command-orchestrator');
 
@@ -318,6 +319,18 @@ class CommandOrchestrator extends EventEmitter {
       this.startPolling(job.id, agentId, componentId, commandName, executionMode);
     }
 
+    // Update FSM state based on command type
+    const fsmEvent = this.commandToFSMEvent(commandName);
+    if (fsmEvent) {
+      fsmManager.processEvent({
+        type: fsmEvent,
+        componentId,
+        mapId,
+        timestamp: new Date(),
+        data: { jobId: job.id },
+      });
+    }
+
     this.emit('command:sent', {
       jobId: job.id,
       componentId,
@@ -387,6 +400,15 @@ class CommandOrchestrator extends EventEmitter {
       if (dbJob.status === 'completed') {
         job.status = 'completed';
         this.stopPolling(jobId);
+        if (componentId) {
+          fsmManager.processEvent({
+            type: 'command_completed',
+            componentId,
+            mapId: dbJob.mapId || '',
+            timestamp: new Date(),
+            data: { jobId },
+          });
+        }
         this.emit('job:completed', { jobId, agentId, componentId, elapsed });
         logger.info({ jobId, elapsed, pollCount: job.pollCount }, 'Async job completed');
         return;
@@ -395,6 +417,15 @@ class CommandOrchestrator extends EventEmitter {
       if (dbJob.status === 'failed') {
         job.status = 'failed';
         this.stopPolling(jobId);
+        if (componentId) {
+          fsmManager.processEvent({
+            type: 'command_failed',
+            componentId,
+            mapId: dbJob.mapId || '',
+            timestamp: new Date(),
+            data: { jobId, error: dbJob.result },
+          });
+        }
         this.emit('job:failed', { jobId, agentId, componentId, error: dbJob.result });
         logger.info({ jobId, elapsed }, 'Async job failed');
         return;
@@ -419,6 +450,16 @@ class CommandOrchestrator extends EventEmitter {
     this.stopPolling(jobId);
 
     await jobsRepository.markTimeout(jobId);
+
+    if (job.componentId) {
+      fsmManager.processEvent({
+        type: 'command_timeout',
+        componentId: job.componentId,
+        mapId: '',
+        timestamp: new Date(),
+        data: { jobId },
+      });
+    }
 
     this.emit('job:timeout', {
       jobId,
@@ -458,6 +499,16 @@ class CommandOrchestrator extends EventEmitter {
    */
   getActiveJobs(): ActiveJob[] {
     return Array.from(this.activeJobs.values());
+  }
+
+  /**
+   * Map a command name to the appropriate FSM event.
+   */
+  private commandToFSMEvent(commandName: string): ComponentEvent | null {
+    if (commandName === 'start' || commandName === 'service.start') return 'start';
+    if (commandName === 'stop' || commandName === 'service.stop') return 'stop';
+    if (commandName === 'restart' || commandName === 'service.restart') return 'restart';
+    return null;
   }
 
   /**

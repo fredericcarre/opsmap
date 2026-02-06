@@ -1,5 +1,5 @@
 import { createChildLogger } from '../config/logger.js';
-import { componentsRepository, agentsRepository } from '../db/repositories/index.js';
+import { componentsRepository, agentsRepository, agentSnapshotsRepository } from '../db/repositories/index.js';
 import { gatewayManager } from '../gateway/manager.js';
 import {
   SnapshotPayload,
@@ -124,6 +124,35 @@ export const snapshotService = {
 
       if (sent) {
         logger.info({ agentId, gatewayId: agentInfo.gatewayId }, 'Snapshot sent to agent');
+
+        // Persist snapshot to DB grouped by map
+        const allComponents = await componentsRepository.findAll();
+        const snapshotComponentIds = new Set(snapshot.snapshot.components.map((sc) => sc.id));
+        const matchedComponents = allComponents.filter((c) => snapshotComponentIds.has(c.id));
+
+        // Group by mapId
+        const byMap = new Map<string, typeof matchedComponents>();
+        for (const comp of matchedComponents) {
+          const list = byMap.get(comp.mapId) || [];
+          list.push(comp);
+          byMap.set(comp.mapId, list);
+        }
+
+        for (const [mapId, comps] of byMap) {
+          const snapshotComps = snapshot.snapshot.components.filter((sc) =>
+            comps.some((c) => c.id === sc.id)
+          );
+
+          await agentSnapshotsRepository.upsert({
+            agentId,
+            mapId,
+            components: snapshotComps.map((c) => c.id),
+            checks: JSON.parse(JSON.stringify(snapshotComps.flatMap((c) => c.checks))),
+            commands: JSON.parse(JSON.stringify(snapshotComps.flatMap((c) => c.actions))),
+          }).catch((err) => {
+            logger.warn({ err, agentId, mapId }, 'Failed to persist agent snapshot');
+          });
+        }
       }
 
       return sent;
