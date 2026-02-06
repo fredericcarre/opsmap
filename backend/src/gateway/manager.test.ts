@@ -33,15 +33,19 @@ vi.mock('../db/repositories/index.js', () => ({
     markFailed: vi.fn().mockResolvedValue(undefined),
     markTimeout: vi.fn().mockResolvedValue(undefined),
   },
+  checkResultsRepository: {
+    create: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 import { gatewayManager } from './manager.js';
-import { gatewaysRepository, agentsRepository, jobsRepository } from '../db/repositories/index.js';
+import { gatewaysRepository, agentsRepository, jobsRepository, checkResultsRepository } from '../db/repositories/index.js';
 import WebSocket from 'ws';
 
 const mockGatewaysRepo = vi.mocked(gatewaysRepository);
 const mockAgentsRepo = vi.mocked(agentsRepository);
 const mockJobsRepo = vi.mocked(jobsRepository);
+const mockCheckResultsRepo = vi.mocked(checkResultsRepository);
 
 // Helper to create a mock WebSocket
 function createMockWs(): EventEmitter & { send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; readyState: number } {
@@ -497,6 +501,209 @@ describe('GatewayManager', () => {
       ws.send.mockImplementation(() => { throw new Error('send failed'); });
       const result = gatewayManager.sendToGateway('gw-err', { type: 'ping' });
       expect(result).toBe(false);
+    });
+  });
+
+  describe('status_update with component and check', () => {
+    it('should persist check result when component_id and check_name present', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su1');
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          component_id: 'comp-1',
+          check_name: 'health',
+          status: 'ok',
+          message: 'All healthy',
+          metrics: { cpu: 10 },
+          timestamp: new Date().toISOString(),
+        },
+      }));
+
+      expect(mockCheckResultsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        componentId: 'comp-1',
+        checkName: 'health',
+        status: 'ok',
+        message: 'All healthy',
+        metrics: { cpu: 10 },
+      }));
+    });
+
+    it('should not persist check result when check_name is missing', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su2');
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          component_id: 'comp-1',
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+        },
+      }));
+
+      expect(mockCheckResultsRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle warning status in FSM event', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su3');
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          component_id: 'comp-1',
+          check_name: 'cpu',
+          status: 'warning',
+          message: 'High CPU',
+          timestamp: new Date().toISOString(),
+        },
+      }));
+
+      expect(mockCheckResultsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'warning',
+      }));
+    });
+
+    it('should handle error status and map to health_fail FSM event', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su4');
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          component_id: 'comp-1',
+          check_name: 'port',
+          status: 'error',
+          message: 'Port closed',
+          timestamp: new Date().toISOString(),
+        },
+      }));
+
+      expect(mockCheckResultsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'error',
+      }));
+    });
+
+    it('should handle check result persistence failure gracefully', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su5');
+
+      mockCheckResultsRepo.create.mockRejectedValueOnce(new Error('DB error'));
+
+      const messageHandler = getMessageHandler(ws);
+      // Should not throw
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          component_id: 'comp-1',
+          check_name: 'health',
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+        },
+      }));
+    });
+
+    it('should not trigger FSM when no component_id', async () => {
+      const ws = createMockWs();
+      const emitSpy = vi.spyOn(gatewayManager, 'emit');
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-su6');
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'status_update',
+        payload: {
+          agent_id: 'agent-1',
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+        },
+      }));
+
+      // Should still emit status:update but not FSM events
+      expect(emitSpy).toHaveBeenCalledWith('status:update', expect.anything());
+      emitSpy.mockRestore();
+    });
+  });
+
+  describe('command_response without result', () => {
+    it('should handle completed response without result data', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-cr1');
+
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-nr', status: 'running' } as any);
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'command_response',
+        payload: { job_id: 'job-nr', agent_id: 'agent-1', status: 'completed', timestamp: new Date().toISOString() },
+      }));
+
+      // markCompleted should not be called since there's no result
+      expect(mockJobsRepo.markCompleted).not.toHaveBeenCalled();
+    });
+
+    it('should handle failed response without error message', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+      await registerGateway(ws, 'gw-cr2');
+
+      mockJobsRepo.findById.mockResolvedValue({ id: 'job-ne', status: 'running' } as any);
+
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'command_response',
+        payload: { job_id: 'job-ne', agent_id: 'agent-1', status: 'failed', timestamp: new Date().toISOString() },
+      }));
+
+      expect(mockJobsRepo.markFailed).toHaveBeenCalledWith('job-ne', 'Unknown error');
+    });
+  });
+
+  describe('agent_disconnected without gateway', () => {
+    it('should handle agent_disconnected for unknown gateway gracefully', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+
+      // Don't register first - gatewayId will be null
+      const messageHandler = getMessageHandler(ws);
+      await messageHandler(JSON.stringify({
+        type: 'agent_disconnected',
+        payload: { agent_id: 'agent-orphan' },
+      }));
+
+      // Should not crash, agent disconnect ignored
+      expect(mockAgentsRepo.markOffline).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disconnect without registration', () => {
+    it('should handle close event without prior registration', async () => {
+      const ws = createMockWs();
+      gatewayManager.handleConnection(ws as any);
+
+      // Close without registering
+      ws.emit('close');
+      await new Promise(r => setTimeout(r, 10));
+
+      // Should not crash
+      expect(mockGatewaysRepo.markOffline).not.toHaveBeenCalled();
     });
   });
 });
