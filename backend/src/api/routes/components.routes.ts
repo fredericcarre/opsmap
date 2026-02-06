@@ -8,7 +8,8 @@ import {
   permissionsRepository,
   auditRepository,
 } from '../../db/repositories/index.js';
-import { commandService } from '../../gateway/command.service.js';
+import { commandOrchestrator } from '../../core/command-orchestrator.js';
+import { snapshotService } from '../../core/snapshot.service.js';
 
 const router = Router();
 
@@ -126,6 +127,9 @@ router.post(
         },
       });
 
+      // Notify agents of snapshot changes (fire and forget)
+      snapshotService.onMapUpdated(req.params.mapId).catch(() => {});
+
       res.status(201).json(component);
     } catch (error) {
       next(error);
@@ -160,6 +164,9 @@ router.put(
         details: { changes: body },
       });
 
+      // Notify agents of snapshot changes (fire and forget)
+      snapshotService.onMapUpdated(req.params.mapId).catch(() => {});
+
       res.json(updated);
     } catch (error) {
       next(error);
@@ -192,6 +199,9 @@ router.delete(
         targetId: req.params.componentId,
         details: { componentName: component.name },
       });
+
+      // Notify agents of snapshot changes (fire and forget)
+      snapshotService.onMapUpdated(req.params.mapId).catch(() => {});
 
       res.status(204).send();
     } catch (error) {
@@ -231,8 +241,8 @@ router.post(
         throw ApiError.notFound('Action not found');
       }
 
-      // Execute action via Gateway
-      const result = await commandService.executeComponentCommand({
+      // Execute action via CommandOrchestrator (auto sync/async + completion checks)
+      const result = await commandOrchestrator.executeCommand({
         mapId: req.params.mapId,
         componentId: req.params.componentId,
         commandName: actionName,
@@ -262,8 +272,9 @@ router.post(
       }
 
       res.json({
-        message: result.message,
+        message: `Command sent (${result.mode || 'sync'})`,
         jobId: result.jobId,
+        mode: result.mode,
       });
     } catch (error) {
       next(error);
@@ -293,7 +304,7 @@ router.post(
       }
 
       // Execute start command via Gateway
-      const result = await commandService.executeComponentCommand({
+      const result = await commandOrchestrator.executeCommand({
         mapId: req.params.mapId,
         componentId: req.params.componentId,
         commandName: 'start',
@@ -315,7 +326,7 @@ router.post(
         throw ApiError.badRequest(result.error || 'Failed to start component');
       }
 
-      res.json({ message: result.message, jobId: result.jobId });
+      res.json({ message: `Command sent (${result.mode || 'sync'})`, jobId: result.jobId, mode: result.mode });
     } catch (error) {
       next(error);
     }
@@ -344,7 +355,7 @@ router.post(
       }
 
       // Execute stop command via Gateway
-      const result = await commandService.executeComponentCommand({
+      const result = await commandOrchestrator.executeCommand({
         mapId: req.params.mapId,
         componentId: req.params.componentId,
         commandName: 'stop',
@@ -366,7 +377,7 @@ router.post(
         throw ApiError.badRequest(result.error || 'Failed to stop component');
       }
 
-      res.json({ message: result.message, jobId: result.jobId });
+      res.json({ message: `Command sent (${result.mode || 'sync'})`, jobId: result.jobId, mode: result.mode });
     } catch (error) {
       next(error);
     }
@@ -395,7 +406,7 @@ router.post(
       }
 
       // Execute restart command via Gateway
-      const result = await commandService.executeComponentCommand({
+      const result = await commandOrchestrator.executeCommand({
         mapId: req.params.mapId,
         componentId: req.params.componentId,
         commandName: 'restart',
@@ -417,7 +428,7 @@ router.post(
         throw ApiError.badRequest(result.error || 'Failed to restart component');
       }
 
-      res.json({ message: result.message, jobId: result.jobId });
+      res.json({ message: `Command sent (${result.mode || 'sync'})`, jobId: result.jobId, mode: result.mode });
     } catch (error) {
       next(error);
     }

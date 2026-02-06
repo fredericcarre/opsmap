@@ -1,29 +1,32 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20.20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+# Install dependencies (context is repo root)
+COPY backend/package*.json ./
 RUN npm ci --only=production=false
 
 # Copy source
-COPY . .
+COPY backend/ .
 
 # Build
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:20.20-alpine AS production
 
-# Security: Run as non-root user
-RUN addgroup -g 1000 -S opsmap && \
-    adduser -u 1000 -S opsmap -G opsmap
+# Patch Alpine OS packages to fix known CVEs (OpenSSL, etc.)
+RUN apk upgrade --no-cache
+
+# Security: Run as non-root user (UID/GID 1000 is taken by 'node' in alpine)
+RUN addgroup -g 10001 -S opsmap && \
+    adduser -u 10001 -S opsmap -G opsmap
 
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY backend/package*.json ./
 
 # Install production dependencies only
 RUN npm ci --only=production && \

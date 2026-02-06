@@ -15,6 +15,8 @@ import {
   StatusUpdate,
   AgentInfo,
 } from './types.js';
+import { fsmManager, ComponentEvent } from '../core/fsm/index.js';
+import { checkResultsRepository } from '../db/repositories/index.js';
 
 const logger = createChildLogger('gateway-manager');
 
@@ -208,6 +210,38 @@ class GatewayManager extends EventEmitter {
       { agentId: status.agent_id, componentId: status.component_id, status: status.status },
       'Status update received'
     );
+
+    // Persist check result to database
+    if (status.component_id && status.check_name) {
+      try {
+        await checkResultsRepository.create({
+          componentId: status.component_id,
+          checkName: status.check_name,
+          status: status.status,
+          message: status.message,
+          metrics: status.metrics,
+          durationMs: 0,
+        });
+      } catch (err) {
+        logger.warn({ err, componentId: status.component_id }, 'Failed to persist check result');
+      }
+    }
+
+    // Feed FSM with health check events
+    if (status.component_id) {
+      const fsmEvent: ComponentEvent =
+        status.status === 'ok' ? 'health_ok' :
+        status.status === 'warning' ? 'health_warning' :
+        'health_fail';
+
+      fsmManager.processEvent({
+        type: fsmEvent,
+        componentId: status.component_id,
+        mapId: '',
+        timestamp: new Date(status.timestamp),
+        data: { message: status.message, checkName: status.check_name },
+      });
+    }
 
     // Emit event for WebSocket clients
     this.emit('status:update', status);

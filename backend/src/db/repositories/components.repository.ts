@@ -45,6 +45,13 @@ export async function findByExternalId(
   return result.rows[0] ? rowToComponent(result.rows[0]) : null;
 }
 
+export async function findAll(): Promise<Component[]> {
+  const result = await query<ComponentRow>(
+    'SELECT * FROM components ORDER BY name'
+  );
+  return result.rows.map(rowToComponent);
+}
+
 export async function findByMap(mapId: string): Promise<Component[]> {
   const result = await query<ComponentRow>(
     'SELECT * FROM components WHERE map_id = $1 ORDER BY name',
